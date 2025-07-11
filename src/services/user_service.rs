@@ -9,9 +9,19 @@ pub struct UserService;
 
 impl UserService {
     pub async fn create_user(
-        db: &DatabaseConnection,
         request: RegisterRequest,
     ) -> Result<users::Model, String> {
+        
+        let db = DbService::get().await
+            .map_err(|e| format!("Failed to get database connection: {}", e))?;
+        
+        if let Some(existing_user) = UserService::get_user_by_email(&request.email).await? {
+            return Err("Email already in use".to_string());
+        }
+        
+        if let Some(existing_user) = UserService::get_user_by_username(db, &request.username).await? {
+            return Err("Username already in use".to_string());
+        }
         
         let password_hash = bcrypt::hash(&request.password, bcrypt::DEFAULT_COST)
             .map_err(|e| format!("Failed to hash password: {}", e))?;
@@ -32,30 +42,43 @@ impl UserService {
     }
     
     pub async fn get_user_by_id(
-        user_id: Uuid,
+        user_id: &Uuid,
     ) -> Result<Option<users::Model>, String> {
         let db = DbService::get().await
             .map_err(|e| format!("Failed to get database connection: {}", e))?;
         
-        users::Entity::find_by_id(user_id)
+        users::Entity::find_by_id(*user_id)
             .one(db)
             .await
             .map_err(|e| format!("Failed to fetch user: {}", e))
     }
     
     pub async fn get_user_by_email(
-        db: &DatabaseConnection,
         email: &str,
     ) -> Result<Option<users::Model>, String> {
+        let db = DbService::get().await
+            .map_err(|e| format!("Failed to get database connection: {}", e))?;
+        
         users::Entity::find()
             .filter(users::Column::Email.eq(email))
             .one(db)
             .await
             .map_err(|e| format!("Failed to fetch user by email: {}", e))
     }
+    
+    pub async fn get_user_by_username(
+        db: &DatabaseConnection,
+        username: &str,
+    ) -> Result<Option<users::Model>, String> {
+        users::Entity::find()
+            .filter(users::Column::Username.eq(username))
+            .one(db)
+            .await
+            .map_err(|e| format!("Failed to fetch user by username: {}", e))
+    }
 
     pub async fn update_user_field<F>(
-        user_id: Uuid,
+        user_id: &Uuid,
         update_fn: F,
     ) -> Result<users::Model, String>
     where
@@ -64,7 +87,7 @@ impl UserService {
         let db = DbService::get().await
             .map_err(|e| format!("Failed to get database connection: {}", e))?;
         
-        let user = users::Entity::find_by_id(user_id)
+        let user = users::Entity::find_by_id(*user_id)
             .one(db)
             .await
             .map_err(|e| format!("Failed to fetch user: {}", e))?
