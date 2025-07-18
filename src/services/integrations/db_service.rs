@@ -1,6 +1,7 @@
 use std::env;
 use sea_orm::{Database, DatabaseConnection};
 use tokio::sync::OnceCell;
+use crate::utils::message_util::MessageUtil;
 
 static DB: OnceCell<DatabaseConnection> = OnceCell::const_new();
 
@@ -20,6 +21,14 @@ impl DbService {
     }
     
     pub async fn get() -> Result<&'static DatabaseConnection, anyhow::Error> {
+        if let Some(db) = DB.get() {
+            return Ok(db);
+        }
+
+        let _ = Self::init()
+            .await
+            .map_err(|e| MessageUtil::info(&e.to_string()));
+        
         DB.get().ok_or_else(|| anyhow::anyhow!("Database connection not initialized"))
     }
 }

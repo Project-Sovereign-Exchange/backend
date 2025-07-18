@@ -1,16 +1,16 @@
+use crate::services::account::jwt_service::JwtService;
 use actix_web::{
-    body::{BoxBody, MessageBody},
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     Error, HttpMessage, HttpResponse,
+    body::{BoxBody, MessageBody},
+    dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
 };
 use futures_util::future::LocalBoxFuture;
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 use std::{
-    future::{ready, Ready},
+    future::{Ready, ready},
     rc::Rc,
 };
-use crate::services::jwt_service::JwtService;
 
 pub struct AuthMiddleware;
 
@@ -57,10 +57,9 @@ where
             let token = match extract_jwt_from_cookie(&req) {
                 Some(token) => token,
                 None => {
-                    let response = HttpResponse::Unauthorized()
-                        .json(serde_json::json!({
-                            "error": "Missing authentication token"
-                        }));
+                    let response = HttpResponse::Unauthorized().json(serde_json::json!({
+                        "error": "Missing authentication token"
+                    }));
                     return Ok(req.into_response(response));
                 }
             };
@@ -69,18 +68,43 @@ where
             let claims = match JwtService::validate_token(&token).await {
                 Ok(claims) => claims,
                 Err(err) => {
-                    let response = HttpResponse::Unauthorized()
-                        .json(serde_json::json!({
-                            "error": format!("Invalid token: {}", err)
-                        }));
+                    let response = HttpResponse::Unauthorized().json(serde_json::json!({
+                        "error": format!("Invalid token: {}", err)
+                    }));
                     return Ok(req.into_response(response));
                 }
             };
 
-            // Add claims to request extensions for use in handlers
+            let path = req.path();
+
+            match claims.purpose.as_str() {
+                "temporary" => {
+                    if !(path == "/mfa/verify") {
+                        let response = HttpResponse::Forbidden()
+                                .json(serde_json::json!({
+                                    "error": "MFA verification required. This token can only access MFA verification endpoints."
+                                }));
+                        return Ok(req.into_response(response));
+                    }
+                }
+                "access" => {
+                    if path == "/mfa/verify" {
+                        let response = HttpResponse::Forbidden().json(serde_json::json!({
+                            "error": "Use MFA verification token for this endpoint"
+                        }));
+                        return Ok(req.into_response(response));
+                    }
+                }
+                _ => {
+                    let response = HttpResponse::Unauthorized().json(serde_json::json!({
+                        "error": "Invalid token purpose"
+                    }));
+                    return Ok(req.into_response(response));
+                }
+            }
+
             req.extensions_mut().insert(claims);
 
-            // Continue to the next service
             let response = service.call(req).await?;
             Ok(response.map_into_boxed_body())
         })

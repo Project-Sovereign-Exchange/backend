@@ -10,8 +10,12 @@ use uuid::Uuid;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
     pub sub: Uuid,
+    pub purpose: String,
     pub exp: usize,
     pub iat: usize,
+    pub jti: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scope: Option<Vec<String>>,
 }
 
 impl FromRequest for Claims {
@@ -32,12 +36,37 @@ pub struct JwtService {}
 
 impl JwtService {
 
-    pub async fn generate_token(user_id: Uuid) -> Result<String, String> {
+    pub async fn generate_access_token(user_id: Uuid) -> Result<String, String> {
         
         let claims = Claims {
             sub: user_id,
-            exp: (chrono::Utc::now() + chrono::Duration::days(7)).timestamp() as usize,
+            purpose: "access".to_string(),
+            exp: (chrono::Utc::now() + chrono::Duration::hours(3)).timestamp() as usize,
             iat: chrono::Utc::now().timestamp() as usize,
+            jti: Uuid::new_v4().to_string(),
+            scope: None,
+        };
+        
+        let secret = env::var("JWT_SECRET")
+            .map_err(|e| format!("JWT_SECRET must be set: {}", e))?;
+        
+        let token = encode(
+            &jsonwebtoken::Header::default(),
+            &claims,
+            &jsonwebtoken::EncodingKey::from_secret(secret.as_ref())
+        ).map_err(|e| e.to_string())?;
+        
+        Ok(token)
+    }
+    
+    pub async fn generate_temporary_token(user_id: Uuid) -> Result<String, String> {
+        let claims = Claims {
+            sub: user_id,
+            purpose: "temporary".to_string(),
+            exp: (chrono::Utc::now() + chrono::Duration::minutes(5)).timestamp() as usize,
+            iat: chrono::Utc::now().timestamp() as usize,
+            jti: Uuid::new_v4().to_string(),
+            scope: None,
         };
         
         let secret = env::var("JWT_SECRET")

@@ -1,6 +1,6 @@
 use crate::entities::users;
-use crate::services::jwt_service::JwtService;
-use crate::services::user_service::UserService;
+use crate::services::account::jwt_service::JwtService;
+use crate::services::account::user_service::UserService;
 use crate::utils::validator_util::ValidatorUtil;
 
 pub struct AuthenticatedUser {
@@ -19,16 +19,23 @@ impl AuthService {
             return Err("Username and password cannot be empty".to_string());
         }
         
-        if(!ValidatorUtil::validate_email(&password) || !ValidatorUtil::validate_password(password)) {
-            return Err("Invalid username or password".to_string());
+        match ValidatorUtil::validate_email(email) {
+            Ok(_) => {}
+            Err(e) => return Err(e.to_string()),
         }
 
         match UserService::get_user_by_email(&email).await {
             Ok(Some(user)) => {
                 if bcrypt::verify(password, &user.password_hash).unwrap_or(false) {
+                    
+                    let token = match user.totp_enabled {
+                        true => JwtService::generate_temporary_token(user.id).await,
+                        false => JwtService::generate_access_token(user.id).await,
+                    }.map_err(|_| "Error generating token".to_string())?;
+                    
                     authenticated_user = AuthenticatedUser {
                         user: user.clone(),
-                        token: JwtService::generate_token(user.id).await.map_err(|e| e.to_string())?,
+                        token,
                     };
 
                     Ok(authenticated_user)

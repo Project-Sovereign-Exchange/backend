@@ -3,9 +3,9 @@ use actix_web::cookie::{Cookie, SameSite};
 use actix_web::http::header;
 use futures_util::TryFutureExt;
 use serde::{Deserialize, Serialize};
-use crate::services::auth_service::AuthService;
-use crate::services::jwt_service::JwtService;
-use crate::services::user_service::UserService;
+use crate::services::account::auth_service::AuthService;
+use crate::services::account::jwt_service::JwtService;
+use crate::services::account::user_service::UserService;
 use crate::utils::validator_util::ValidatorUtil;
 
 //Login Route
@@ -23,7 +23,7 @@ struct LoginResponse {
 }
 
 #[post("/login")]
-pub async fn login_user(
+async fn login(
     request: web::Json<LoginRequest>,
 ) -> Result<impl Responder> {
     
@@ -58,16 +58,18 @@ pub struct RegisterRequest {
 }
 
 #[post("/register")]
-pub async fn register_user(
+pub async fn register(
     request: web::Json<RegisterRequest>,
 ) -> Result<impl Responder> {
     
-    if !ValidatorUtil::validate_email(&request.email) {
-        return Err(actix_web::error::ErrorBadRequest("Invalid email format"));
+    match ValidatorUtil::validate_email(&request.email) {
+        Ok(_) => {},
+        Err(e) => return Err(actix_web::error::ErrorBadRequest(e)),
     }
     
-    if !ValidatorUtil::validate_password(&request.password) {
-        return Err(actix_web::error::ErrorBadRequest("Invalid password format"));
+    match ValidatorUtil::validate_password(&request.password) {
+        Ok(_) => {},
+        Err(e) => return Err(actix_web::error::ErrorBadRequest(e)),
     }
     
     let user = UserService::create_user(
@@ -79,7 +81,7 @@ pub async fn register_user(
 
 //Logout Route
 #[post("/logout")]
-async fn logout_user() -> Result<impl Responder> {
+async fn logout() -> Result<impl Responder> {
     // Invalidate the user's session or token here
     Ok(actix_web::HttpResponse::Ok().json("User logged out successfully"))
 }

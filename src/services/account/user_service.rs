@@ -2,8 +2,8 @@ use sea_orm::*;
 use uuid::Uuid;
 use chrono::Utc;
 use crate::entities::users;
-use crate::handlers::auth_handler::RegisterRequest;
-use crate::services::db_service::DbService;
+use crate::handlers::account::auth_handler::RegisterRequest;
+use crate::services::integrations::db_service::DbService;
 
 pub struct UserService;
 

@@ -23,7 +23,7 @@ pub struct Model {
     pub account_status: String,
     pub last_login_at: Option<ChronoDateTimeUtc>,
     pub password_changed_at: Option<ChronoDateTimeUtc>,
-    pub login_attempts: Option<i32>,
+    pub login_attempts: Option<i64>,
     pub locked_until: Option<ChronoDateTimeUtc>,
     pub timezone: Option<String>,
     pub language: Option<String>,
@@ -42,6 +42,7 @@ pub struct Model {
     pub address_verification_method: Option<String>,
     pub created_at: ChronoDateTimeUtc,
     pub updated_at: ChronoDateTimeUtc,
+    pub verified_seller: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -95,6 +96,7 @@ impl ActiveModelBehavior for ActiveModel {
             created_at: Set(chrono::Utc::now()),
             updated_at: Set(chrono::Utc::now()),
             email_verified: Set(false),
+            verified_seller: Set(false),
             phone_verified: Set(false),
             totp_enabled: Set(false),
             account_status: Set("active".to_owned()),

@@ -5,6 +5,7 @@ const BOLD: &str = "\x1b[1m";
 const RED: &str = "\x1b[31m";
 const GREEN: &str = "\x1b[32m";
 const PASTEL_BLUE: &str = "\x1b[38;5;117m";
+const PASTEL_ORANGE: &str = "\x1b[38;5;214m";
 
 pub struct MessageUtil;
 
@@ -17,6 +18,9 @@ impl MessageUtil {
     }
     pub fn info(message: &str) {
         print_message("Info", message, PASTEL_BLUE);
+    }
+    pub fn api(message: &str) {
+        print_message("API", message, PASTEL_ORANGE);
     }
 }
 

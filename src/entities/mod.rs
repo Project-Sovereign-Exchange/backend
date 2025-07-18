@@ -1,9 +1,12 @@
 pub mod users;
-mod mfa_backup_codes;
-mod known_login_locations;
-mod login_history;
-mod user_sessions;
-mod address_history;
+pub mod mfa_backup_codes;
+pub mod known_login_locations;
+pub mod login_history;
+pub mod user_sessions;
+pub mod address_history;
+pub mod token_blacklist;
+pub mod products;
+pub mod listings;
 
 pub use users::Entity as Users;
 pub use mfa_backup_codes::Entity as MfaBackupCodes;
