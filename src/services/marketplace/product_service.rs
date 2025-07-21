@@ -1,20 +1,27 @@
+use std::sync::Arc;
 use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 use crate::entities::products;
 use crate::handlers::marketplace::product_handler::{CreateProductRequest, UpdateProductRequest};
-use crate::services::integrations::db_service::DbService;
 use uuid::Uuid;
+use crate::app_state::AppState;
 
-pub struct ProductService;
+pub struct ProductService {
+    pub state: AppState,
+}
 
 impl ProductService {
+    pub fn new(state: AppState) -> Self {
+        Self { state }
+    }
+    
     pub async fn create_product(
+        &self,
         request: CreateProductRequest,
     ) -> Result<products::Model, String> {
-        let db = DbService::get().await
-            .map_err(|e| format!("Failed to get database connection: {}", e))?;
+        let db = &self.state.db;
 
         let product = products::ActiveModel {
-            id: Set(uuid::Uuid::new_v4()),
+            id: Set(Uuid::new_v4()),
             name: Set(request.name),
             image_url: Set(request.image_url),
             game: Set(request.game),
@@ -29,10 +36,10 @@ impl ProductService {
     }
 
     pub async fn update_product(
+        &self,
         request: UpdateProductRequest,
     ) -> Result<products::Model, String> {
-        let db = DbService::get().await
-            .map_err(|e| format!("Failed to get database connection: {}", e))?;
+        let db = &self.state.db;
 
         let mut product: products::ActiveModel = products::Entity::find_by_id(request.id)
             .one(db)
@@ -61,9 +68,11 @@ impl ProductService {
             .map_err(|e| format!("Failed to update product: {}", e))
     }
 
-    pub async fn delete_product(id: uuid::Uuid) -> Result<bool, String> {
-        let db = DbService::get().await
-            .map_err(|e| format!("Failed to get database connection: {}", e))?;
+    pub async fn delete_product(
+        &self,
+        id: Uuid
+    ) -> Result<bool, String> {
+        let db = &self.state.db;
 
         products::Entity::delete_by_id(id)
             .exec(db)
@@ -73,10 +82,10 @@ impl ProductService {
     }
 
     pub async fn get_product_by_id(
+        &self,
         id: &Uuid,
     ) -> Result<Option<products::Model>, String> {
-        let db = DbService::get().await
-            .map_err(|e| format!("Failed to get database connection: {}", e))?;
+        let db = &self.state.db;
 
         products::Entity::find_by_id(*id)
             .one(db)

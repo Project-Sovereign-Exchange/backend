@@ -1,17 +1,19 @@
-use actix_web::{post, web, Responder, Result};
+use actix_web::{post, web, HttpResponse, Responder, Result};
 use actix_web::cookie::{Cookie, SameSite};
 use actix_web::http::header;
 use futures_util::TryFutureExt;
 use serde::{Deserialize, Serialize};
-use crate::services::account::auth_service::AuthService;
+use crate::app_state::AppState;
+use crate::services::account::auth_service::{AuthService, AuthenticatedUser};
 use crate::services::account::jwt_service::JwtService;
 use crate::services::account::user_service::UserService;
+use crate::services::integrations::cookie_service::CookieService;
 use crate::utils::validator_util::ValidatorUtil;
 
 //Login Route
 #[derive(Deserialize)]
 struct LoginRequest {
-    pub username: String,
+    pub email: String,
     pub password: String,
 }
 
@@ -24,27 +26,25 @@ struct LoginResponse {
 
 #[post("/login")]
 async fn login(
+    state: web::Data<AppState>,
     request: web::Json<LoginRequest>,
 ) -> Result<impl Responder> {
+    let auth_service = AuthService::new(state.as_ref().clone());
     
-    let authenticated_user = AuthService::authenticate_user(
-        &request.username, 
-        &request.password
-    ).await.map_err(|e| actix_web::error::ErrorBadRequest(e))?;
-    
-    let cookie = Cookie::build("auth_token", authenticated_user.token)
-        .http_only(true)
-        .secure(false)
-        .same_site(SameSite::Strict)
-        .finish();
-    
-    Ok(actix_web::HttpResponse::Ok()
-        .cookie(cookie)
-        .json(LoginResponse {
-            user_id: authenticated_user.user.id,
-            username: authenticated_user.user.username.unwrap_or_default(),
-            email: authenticated_user.user.email,
-        }))
+    match auth_service.authenticate_user(&request.email, &request.password).await {
+        Ok (authenticated_user) => {
+            Ok(actix_web::HttpResponse::Ok()
+                .cookie(CookieService::auth_cookie(&authenticated_user.token))
+                .json(LoginResponse {
+                    user_id: authenticated_user.user.id,
+                    username: authenticated_user.user.username.unwrap_or_default(),
+                    email: authenticated_user.user.email,
+                }))
+        }
+        Err (e) => Err(
+            actix_web::error::ErrorUnauthorized(e)
+        ),
+    }
 }
 
 
@@ -59,24 +59,16 @@ pub struct RegisterRequest {
 
 #[post("/register")]
 pub async fn register(
+    state: web::Data<AppState>,
     request: web::Json<RegisterRequest>,
 ) -> Result<impl Responder> {
+    let request = request.into_inner();
+    let auth_service = AuthService::new(state.as_ref().clone());
     
-    match ValidatorUtil::validate_email(&request.email) {
-        Ok(_) => {},
-        Err(e) => return Err(actix_web::error::ErrorBadRequest(e)),
+    match auth_service.register_user(request).await {
+        Ok(_) => Ok(HttpResponse::Ok()),
+        Err(e) => Err(actix_web::error::ErrorBadRequest(e)),
     }
-    
-    match ValidatorUtil::validate_password(&request.password) {
-        Ok(_) => {},
-        Err(e) => return Err(actix_web::error::ErrorBadRequest(e)),
-    }
-    
-    let user = UserService::create_user(
-        request.into_inner(),
-    ).await.map_err(|e| actix_web::error::ErrorBadRequest(e))?;
-
-    Ok(actix_web::HttpResponse::Created().json("User registered successfully"))
 }
 
 //Logout Route

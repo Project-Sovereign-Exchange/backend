@@ -1,4 +1,6 @@
+use crate::app_state::AppState;
 use crate::entities::users;
+use crate::handlers::account::auth_handler::RegisterRequest;
 use crate::services::account::jwt_service::JwtService;
 use crate::services::account::user_service::UserService;
 use crate::utils::validator_util::ValidatorUtil;
@@ -8,11 +10,20 @@ pub struct AuthenticatedUser {
     pub token: String,
 }
 
-pub struct AuthService;
+pub struct AuthService {
+    state: AppState,
+}
 
 impl AuthService {
+    
+    pub fn new(state: AppState) -> Self {
+        Self { state }
+    }
 
-    pub async fn authenticate_user(email: &str, password: &str) -> Result<AuthenticatedUser, String> {
+    pub async fn authenticate_user(
+        &self,
+        email: &str, 
+        password: &str) -> Result<AuthenticatedUser, String> {
         let authenticated_user;
         
         if email.is_empty() || password.is_empty() {
@@ -24,7 +35,9 @@ impl AuthService {
             Err(e) => return Err(e.to_string()),
         }
 
-        match UserService::get_user_by_email(&email).await {
+        let user_service = UserService::new(self.state.clone());
+        
+        match user_service.get_user_by_email(&email).await {
             Ok(Some(user)) => {
                 if bcrypt::verify(password, &user.password_hash).unwrap_or(false) {
                     
@@ -49,6 +62,32 @@ impl AuthService {
             Err(_) => {
                 Err("Invalid username or password".to_string())
             }
+        }
+    }
+    
+    pub async fn register_user(
+        &self,
+        request: RegisterRequest,
+    ) -> Result<(), String> {
+        match ValidatorUtil::validate_email(&request.email) {
+            Ok(_) => {},
+            Err(e) => return Err(e.to_string()),
+        }
+
+        match ValidatorUtil::validate_password(&request.password) {
+            Ok(_) => {},
+            Err(e) => return Err(e.to_string()),
+        }
+        
+        match ValidatorUtil::validate_username(&request.username) {
+            Ok(_) => {},
+            Err(e) => return Err(e.to_string()),
+        }
+        
+        let user_service = UserService::new(self.state.clone());
+        match user_service.create_user(request).await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.to_string()),
         }
     }
 

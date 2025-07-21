@@ -20,6 +20,12 @@ pub enum ValidationError {
     EmailRequired,
     #[error("Password is required")]
     PasswordRequired,
+    #[error("Username is required")]
+    UsernameRequired,
+    #[error("Username must be at least 4 characters long")]
+    UsernameTooShort,
+    #[error("Username is too long (max 16 characters)")]
+    UsernameTooLong,
 }
 
 pub type ValidationResult<T> = Result<T, ValidationError>;
@@ -82,6 +88,22 @@ impl ValidatorUtil {
             return Err(ValidationError::PasswordInvalidCharacters);
         }
 
+        Ok(())
+    }
+    
+    pub fn validate_username(username: &str) -> ValidationResult<()> {
+        if username.is_empty() {
+            return Err(ValidationError::UsernameRequired);
+        }
+        
+        if username.len() > 16 {
+            return Err(ValidationError::UsernameTooLong);
+        }
+        
+        if username.len() < 4 {
+            return Err(ValidationError::UsernameTooShort);
+        }
+        
         Ok(())
     }
 }

@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use actix_web::{delete, get, post, web, Responder, Result};
+use crate::app_state::AppState;
 use crate::services::marketplace::product_service::ProductService;
 
 #[derive(Deserialize)]
@@ -13,16 +14,16 @@ pub struct CreateProductRequest {
 
 #[post("/create")]
 pub async fn create_product(
+    state: web::Data<AppState>,
     request: web::Json<CreateProductRequest>,
 ) -> Result<impl Responder> {
     let request = request.into_inner();
+    let product_service = ProductService::new(state.as_ref().clone());
     
-    let product = ProductService::create_product(request)
-        .await
-        .map_err(|e| actix_web::error::ErrorBadRequest(e))?;
-
-    Ok(actix_web::HttpResponse::Created()
-        .json(product))
+   match product_service.create_product(request).await {
+       Ok(product) => Ok(web::Json(product)),
+       Err(e) => Err(actix_web::error::ErrorInternalServerError(e)),
+   }
 }
 
 #[derive(Deserialize)]
@@ -37,47 +38,50 @@ pub struct UpdateProductRequest {
 
 #[post("/update")]
 pub async fn update_product(
+    state: web::Data<AppState>,
     request: web::Json<UpdateProductRequest>,
 ) -> Result<impl Responder> {
     let request = request.into_inner();
-    
-    let updated_product = ProductService::update_product(request)
-        .await
-        .map_err(|e| actix_web::error::ErrorBadRequest(e))?;
+    let product_service = ProductService::new(state.as_ref().clone());
 
-    Ok(actix_web::HttpResponse::Ok()
-        .json(updated_product))
+    match product_service.update_product(request).await {
+        Ok(product) => Ok(actix_web::HttpResponse::Ok().json(product)),
+        Err(e) => {
+            Err(actix_web::error::ErrorInternalServerError("Product failed to update"))
+        },
+    }
 }
 
 #[delete("/{id}")]
 pub async fn delete_product(
+    state: web::Data<AppState>,
     id: web::Path<uuid::Uuid>,
 ) -> Result<impl Responder> {
     let id = id.into_inner();
+    let product_service = ProductService::new(state.as_ref().clone());
     
-    let deleted = ProductService::delete_product(id)
-        .await
-        .map_err(|e| actix_web::error::ErrorBadRequest(e))?;
-
-    if deleted {
-        Ok(actix_web::HttpResponse::NoContent().finish())
-    } else {
-        Err(actix_web::error::ErrorNotFound("Product not found"))
+    match product_service.delete_product(id).await {
+        Ok(true) => Ok(actix_web::HttpResponse::NoContent().finish()),
+        Ok(false) => Err(actix_web::error::ErrorNotFound("Product not found")),
+        Err(e) => {
+            Err(actix_web::error::ErrorInternalServerError("Product failed to delete"))
+        }
     }
 }
 
 #[get("/{id}")]
 pub async fn get_product(
+    state: web::Data<AppState>,
     id: web::Path<uuid::Uuid>,
 ) -> Result<impl Responder> {
     let id = id.into_inner();
+    let product_service = ProductService::new(state.as_ref().clone());
     
-    let product = ProductService::get_product_by_id(&id)
-        .await
-        .map_err(|e| actix_web::error::ErrorBadRequest(e))?
-        .ok_or_else(|| actix_web::error::ErrorNotFound("Product not found"))?;
-
-    Ok(actix_web::HttpResponse::Ok()
-        .json(product))
+    match product_service.get_product_by_id(&id).await {
+        Ok(product) => Ok(actix_web::HttpResponse::Ok().json(product)),
+        Err(e) => {
+            Err(actix_web::error::ErrorInternalServerError("Product failed to query"))
+        }
+    }
 }
 

@@ -1,25 +1,29 @@
+use actix_web::web;
 use sea_orm::*;
 use uuid::Uuid;
 use chrono::Utc;
+use crate::app_state::AppState;
 use crate::entities::users;
 use crate::handlers::account::auth_handler::RegisterRequest;
-use crate::services::integrations::db_service::DbService;
 
-pub struct UserService;
+pub struct UserService {
+    state: AppState,
+}
 
 impl UserService {
+    pub fn new(state: AppState) -> Self {
+        Self { state }
+    }
+    
     pub async fn create_user(
+        &self,
         request: RegisterRequest,
     ) -> Result<users::Model, String> {
-        
-        let db = DbService::get().await
-            .map_err(|e| format!("Failed to get database connection: {}", e))?;
-        
-        if let Some(existing_user) = UserService::get_user_by_email(&request.email).await? {
+        if let Some(existing_user) = self.get_user_by_email(&request.email).await? {
             return Err("Email already in use".to_string());
         }
         
-        if let Some(existing_user) = UserService::get_user_by_username(db, &request.username).await? {
+        if let Some(existing_user) = self.get_user_by_username(&request.username).await? {
             return Err("Username already in use".to_string());
         }
         
@@ -35,60 +39,54 @@ impl UserService {
             ..Default::default()
         };
 
-        let user = user.insert(db).await
+        let user = user.insert(&self.state.db).await
             .map_err(|e| format!("Failed to create user: {}", e))?;
         
         Ok(user)
     }
     
     pub async fn get_user_by_id(
+        &self,
         user_id: &Uuid,
     ) -> Result<Option<users::Model>, String> {
-        let db = DbService::get().await
-            .map_err(|e| format!("Failed to get database connection: {}", e))?;
-        
         users::Entity::find_by_id(*user_id)
-            .one(db)
+            .one(&self.state.db)
             .await
             .map_err(|e| format!("Failed to fetch user: {}", e))
     }
     
     pub async fn get_user_by_email(
+        &self,
         email: &str,
     ) -> Result<Option<users::Model>, String> {
-        let db = DbService::get().await
-            .map_err(|e| format!("Failed to get database connection: {}", e))?;
-        
         users::Entity::find()
             .filter(users::Column::Email.eq(email))
-            .one(db)
+            .one(&self.state.db)
             .await
             .map_err(|e| format!("Failed to fetch user by email: {}", e))
     }
     
     pub async fn get_user_by_username(
-        db: &DatabaseConnection,
+        &self,
         username: &str,
     ) -> Result<Option<users::Model>, String> {
         users::Entity::find()
             .filter(users::Column::Username.eq(username))
-            .one(db)
+            .one(&self.state.db)
             .await
             .map_err(|e| format!("Failed to fetch user by username: {}", e))
     }
 
     pub async fn update_user_field<F>(
+        &self,
         user_id: &Uuid,
         update_fn: F,
     ) -> Result<users::Model, String>
     where
         F: FnOnce(&mut users::ActiveModel),
     {
-        let db = DbService::get().await
-            .map_err(|e| format!("Failed to get database connection: {}", e))?;
-        
         let user = users::Entity::find_by_id(*user_id)
-            .one(db)
+            .one(&self.state.db)
             .await
             .map_err(|e| format!("Failed to fetch user: {}", e))?
             .ok_or_else(|| "User not found".to_string())?;
@@ -100,7 +98,7 @@ impl UserService {
         update_fn(&mut user_update);
 
         let updated_user = user_update
-            .update(db)
+            .update(&self.state.db)
             .await
             .map_err(|e| format!("Failed to update user: {}", e))?;
         

@@ -6,6 +6,7 @@ use futures_util::future::{ready, Ready};
 use jsonwebtoken::{decode, DecodingKey, Validation, encode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use crate::app_state::AppState;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
@@ -32,7 +33,9 @@ impl FromRequest for Claims {
     }
 }
 
-pub struct JwtService {}
+pub struct JwtService {
+    state: AppState,
+}
 
 impl JwtService {
 

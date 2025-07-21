@@ -1,8 +1,35 @@
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 use chrono::{DateTime, Utc};
+use reqwest::{Client, Response};
 use sea_orm::prelude::Decimal;
 use serde::{Deserialize, Serialize};
+use crate::app_state::AppState;
 use crate::config::config::Config;
+
+pub struct StripeClient {
+    client: Arc<Client>,
+    api_key: String,
+    base_url: String,
+}
+
+impl StripeClient {
+    pub fn new() -> Self {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(10))
+            .pool_max_idle_per_host(3) // Conservative for Stripe
+            .build()
+            .expect("Failed to create Stripe client");
+
+        Self {
+            client: Arc::new(client),
+            api_key: Config::get().stripe_key.clone(),
+            base_url: "https://api.stripe.com/v1".to_string(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StripeProduct {
@@ -10,7 +37,7 @@ pub struct StripeProduct {
     pub object: String,
     pub active: bool,
     pub created: u64,
-    pub default_price: Option<String>,
+    pub default_price: String,
     pub description: Option<String>,
     pub images: Vec<String>,
     pub marketing_features: Vec<MarketingFeature>,
@@ -88,20 +115,28 @@ pub struct ProductWithPrice {
     pub price: StripePrice,
 }
 
-pub struct StripeService;
+pub struct StripeService {
+    state: AppState,
+}
 
 impl StripeService {
+    pub fn new(state: AppState) -> Self {
+        Self { state }
+    }
+    
     pub async fn create_stripe_product(
         product_name: &str,
         product_description: Option<&str>,
-        price: Decimal,
-    ) -> Result<ProductWithPrice, String> {
+        price: i64,
+    ) -> Result<StripeProduct, String> {
         let key: &str = Config::get().stripe_key.as_ref();
         let client = reqwest::Client::new();
-        
+
         let product_url = "https://api.stripe.com/v1/products";
         let mut product_params = vec![
             ("name", product_name.to_string()),
+            ("default_price_data[unit_amount]", price.to_string()),
+            ("default_price_data[currency]", "eur".to_string()),
         ];
 
         if let Some(desc) = product_description {
@@ -125,32 +160,88 @@ impl StripeService {
 
         let product: StripeProduct = product_response.json().await
             .map_err(|e| format!("Failed to parse product response: {}", e))?;
-        
-        let price_url = "https://api.stripe.com/v1/prices";
-        let price_params = vec![
-            ("unit_amount", price.to_string()),
-            ("currency", "usd".to_string()),
-            ("product", product.id.clone()),
-        ];
 
-        let price_response = client
-            .post(price_url)
+        Ok(product)
+    }
+    
+    pub async fn get_stripe_product(
+        product_id: &str,
+    ) -> Result<StripeProduct, String> {
+        let key: &str = Config::get().stripe_key.as_ref();
+        let client = reqwest::Client::new();
+        
+        let url = format!("https://api.stripe.com/v1/products/{}", product_id);
+        
+        let response = client
+            .get(&url)
             .header("Authorization", format!("Bearer {}", key))
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .form(&price_params)
             .send()
             .await
-            .map_err(|e| format!("Failed to send price creation request: {}", e))?;
+            .map_err(|e| format!("Failed to send request: {}", e))?;
 
-        if !price_response.status().is_success() {
-            let error_text = price_response.text().await
+        if !response.status().is_success() {
+            let error_text = response.text().await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(format!("Stripe price creation error: {}", error_text));
+            return Err(format!("Stripe product retrieval error: {}", error_text));
         }
 
-        let price: StripePrice = price_response.json().await
-            .map_err(|e| format!("Failed to parse price response: {}", e))?;
+        response.json::<StripeProduct>().await
+            .map_err(|e| format!("Failed to parse product response: {}", e))
+    }
+    
+    pub async fn delete_stripe_product(
+        &self,
+        product_id: &str,
+    ) -> Result<(), String> {
+        let key: &str = Config::get().stripe_key.as_ref();
+        let client = reqwest::Client::new();
 
-        Ok(ProductWithPrice { product, price })
+        let product_url = format!("https://api.stripe.com/v1/products/{}", product_id);
+        
+        let response = client
+            .get(&product_url)
+            .header("Authorization", format!("Bearer {}", key))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to send request: {}", e))?;
+        
+        if !response.status().is_success() {
+            let error_text = response.text().await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(format!("Stripe product retrieval error: {}", error_text));
+        }
+        
+        let product = response.json::<StripeProduct>().await
+            .map_err(|e| format!("Failed to parse product response: {}", e));
+        
+        let price_url = format!("https://api.stripe.com/v1/prices/{}", product?.default_price);
+
+        let delete_price_response = client
+            .delete(&price_url)
+            .header("Authorization", format!("Bearer {}", key))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to send request: {}", e))?;
+
+        if !delete_price_response.status().is_success() {
+            let error_text = delete_price_response.text().await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(format!("Stripe product retrieval error: {}", error_text));
+        }
+        
+        let delete_response = client
+            .delete(&product_url)
+            .header("Authorization", format!("Bearer {}", key))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to send delete request: {}", e))?;
+
+        if !delete_response.status().is_success() {
+            let error_text = delete_response.text().await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(format!("Stripe product deletion error: {}", error_text));
+        }
+
+        Ok(())
     }
 }

@@ -1,0 +1,38 @@
+use std::env;
+use std::sync::Arc;
+use std::time::Duration;
+use sea_orm::{ConnectOptions, Database, DatabaseConnection};
+use tracing::log;
+use crate::config::config::Config;
+use crate::services::integrations::stripe_service::StripeClient;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub db: DatabaseConnection,
+    pub stripe_client: Arc<StripeClient>,
+}
+
+impl AppState {
+    pub async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let config = Config::get();
+        
+        let mut db_options = ConnectOptions::new(config.database_url.clone());
+        db_options.max_connections(config.max_db_connections)
+            .min_connections(5)
+            .connect_timeout(Duration::from_secs(8))
+            .idle_timeout(Duration::from_secs(8))
+            .acquire_timeout(Duration::from_secs(8))
+            .max_lifetime(Duration::from_secs(8))
+            .sqlx_logging(true)
+            .sqlx_logging_level(log::LevelFilter::Info);
+        
+        let db = Database::connect(db_options).await?;
+        
+        let stripe_client = Arc::new(StripeClient::new());
+        
+        Ok(Self {
+            db,
+            stripe_client,
+        })
+    }
+}

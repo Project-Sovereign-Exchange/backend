@@ -27,6 +27,12 @@ fn private_routes(cfg: &mut web::ServiceConfig) {
                 .service(account::mfa_handler::enable_mfa)
                 .service(account::mfa_handler::disable_mfa)
                 .service(account::mfa_handler::verify_mfa),
+        )
+        .service(
+            web::scope("/listing")
+                .service(marketplace::listing_handler::create_listing)
+                .service(marketplace::listing_handler::update_listing)
+                .service(marketplace::listing_handler::delete_listing)
         );
 }
 
@@ -42,5 +48,9 @@ fn public_routes(cfg: &mut web::ServiceConfig) {
                 .service(marketplace::product_handler::create_product)
                 .service(marketplace::product_handler::update_product)
                 .service(marketplace::product_handler::delete_product),
+        )
+        .service(
+            web::scope("/listing")
+                .service(marketplace::listing_handler::get_listing),
         );
 }

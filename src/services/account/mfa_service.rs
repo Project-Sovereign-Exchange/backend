@@ -1,18 +1,31 @@
+use actix_web::HttpResponse;
 use sea_orm::*;
 use totp_rs::Secret;
 use uuid::Uuid;
+use crate::app_state::AppState;
 use crate::services::account::user_service::UserService;
-use crate::services::integrations::db_service::DbService;
 use crate::entities::mfa_backup_codes;
+use crate::handlers::account::mfa_handler::{MFALoginRequest, MFARequest};
 
-pub struct MFAService;
+pub struct MfaService {
+    state: AppState,
+}
 
-impl MFAService {
-    pub async fn generate_user_secret(user_id: &Uuid) -> Result<(), String> {
+impl MfaService {
+    pub fn new(state: AppState) -> Self {
+        Self { state }
+    }
+
+    pub async fn generate_user_secret(
+        &self,
+        user_id: &Uuid
+    ) -> Result<(), String> {
         let secret = Secret::generate_secret();
         let secret_base32 = secret.to_encoded().to_string();
-        
-        let user = UserService::update_user_field(
+
+        let user_service = UserService::new(self.state.clone());
+
+        let user = user_service.update_user_field(
             user_id,
             |user| {
                 user.totp_secret = Set(Some(secret_base32.clone()));
@@ -22,8 +35,13 @@ impl MFAService {
         Ok(())
     }
     
-    pub async fn generate_qr_code(user_id: &Uuid) -> Result<String, Box<dyn std::error::Error>> {
-        let user = UserService::get_user_by_id(user_id).await
+    pub async fn generate_qr_code(
+        &self,
+        user_id: &Uuid
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let user_service = UserService::new(self.state.clone());
+
+        let user = user_service.get_user_by_id(user_id).await
             .map_err(|e| format!("Failed to fetch user: {}", e))?
             .ok_or("User not found")?;
         
@@ -50,7 +68,12 @@ impl MFAService {
         Ok(qr_code)
     }
     
-    pub async fn verify_totp_code(user_email: &str, totp_code: &str, secret_base32: &str) -> Result<bool, Box<dyn std::error::Error>> {
+    pub async fn verify_totp_code(
+        &self,
+        user_email: &str,
+        totp_code: &str,
+        secret_base32: &str
+    ) -> Result<bool, String> {
         let secret = Secret::Encoded(secret_base32.to_string());
         
         let totp = totp_rs::TOTP::new(
@@ -58,18 +81,23 @@ impl MFAService {
             6,
             1,
             30,
-            secret.to_bytes()?,
+            secret.to_bytes()
+            .map_err(|e| format!("Failed to parse code: {}", e))?,
             Some("TCGEmporium".to_string()),
             user_email.to_string(),
-        )?;
+        ).map_err(|e| format!("Failed to generate totp: {}", e))?;
 
-        let is_valid = totp.check_current(totp_code)?;
+        let is_valid = totp.check_current(totp_code)
+            .map_err(|e| format!("Failed to validate totp: {}", e))?;
         
         Ok(is_valid)
     }
     
-    pub async fn verify_backup_code(user_id: &Uuid, backup_code: &str) -> Result<bool, String> {
-        let backup_codes = Self::get_backup_codes(&user_id)
+    pub async fn verify_backup_code(
+        &self,
+        user_id: &Uuid, backup_code: &str
+    ) -> Result<bool, String> {
+        let backup_codes = self.get_backup_codes(&user_id)
             .await
             .map_err(|e| format!("Failed to fetch backup codes: {}", e))?;
         
@@ -80,8 +108,7 @@ impl MFAService {
                 .map_err(|e| format!("Failed to verify backup code: {}", e))?;
             
             if correct && code.used_at.is_none() {
-                let db = DbService::get().await
-                    .map_err(|e| format!("Failed to get database connection: {}", e))?;
+                let db = &self.state.db;
                 
                 let mut active_code: mfa_backup_codes::ActiveModel = code.into();
                 active_code.used_at = Set(Some(chrono::Utc::now()));
@@ -96,8 +123,14 @@ impl MFAService {
         Err("Invalid backup code".to_string())
     }
 
-    pub async fn enable_mfa_for_user(user_id: &Uuid, code: &str) -> Result<(), String> {
-        let user = UserService::get_user_by_id(&user_id)
+    pub async fn enable_mfa_for_user(
+        &self,
+        user_id: &Uuid,
+        code: &str
+    ) -> Result<(), String> {
+        let user_service = UserService::new(self.state.clone());
+
+        let user = user_service.get_user_by_id(&user_id)
             .await
             .map_err(|e| format!("Failed to fetch user: {}", e))?
             .ok_or_else(||"User not found")?;
@@ -110,11 +143,11 @@ impl MFAService {
             .as_ref()
             .ok_or_else(|| "MFA secret not set for user")?;
         
-        Self::verify_totp_code(&user.email, code, totp_secret)
+        self.verify_totp_code(&user.email, code, totp_secret)
             .await
             .map_err(|e| format!("Failed to verify TOTP code: {}", e))?;
         
-        UserService::update_user_field(
+        user_service.update_user_field(
             &user_id,
             |user| {
                 user.totp_enabled = Set(true);
@@ -126,8 +159,14 @@ impl MFAService {
         Ok(())
     }
     
-    pub async fn disable_mfa_for_user(user_id: &Uuid, code: &str) -> Result<(), String> {
-        let user = UserService::get_user_by_id(&user_id)
+    pub async fn disable_mfa_for_user(
+        &self,
+        user_id: &Uuid,
+        request: MFARequest,
+    ) -> Result<(), String> {
+        let user_service = UserService::new(self.state.clone());
+
+        let user = user_service.get_user_by_id(&user_id)
             .await
             .map_err(|e| format!("Failed to fetch user: {}", e))?
             .ok_or_else(|| "User not found")?;
@@ -140,11 +179,11 @@ impl MFAService {
             .as_ref()
             .ok_or_else(|| "MFA secret not set for user")?;
         
-        Self::verify_totp_code(&user.email, code, totp_secret)
+        self.verify_totp_code(&user.email, &request.mfa_code, totp_secret)
             .await
             .map_err(|e| format!("Failed to verify TOTP code: {}", e))?;
         
-        UserService::update_user_field(
+        user_service.update_user_field(
             &user_id,
             |user| {
                 user.totp_enabled = Set(false);
@@ -157,9 +196,11 @@ impl MFAService {
         Ok(())
     }
     
-    async fn generate_backup_codes(user_id: &Uuid) -> Result<(), String> {
-        let db = DbService::get().await
-            .map_err(|e| format!("Failed to get database connection: {}", e))?;
+    async fn generate_backup_codes(
+        &self,
+        user_id: &Uuid
+    ) -> Result<(), String> {
+        let db = &self.state.db;
         
         let mut codes = Vec::new();
         
@@ -188,9 +229,11 @@ impl MFAService {
         Ok(())
     }
     
-    async fn get_backup_codes(user_id: &Uuid) -> Result<Vec<mfa_backup_codes::Model>, String> {
-        let db = DbService::get().await
-            .map_err(|e| format!("Failed to get database connection: {}", e))?;
+    async fn get_backup_codes(
+        &self,
+        user_id: &Uuid
+    ) -> Result<Vec<mfa_backup_codes::Model>, String> {
+        let db = &self.state.db;
         
         let backup_codes = mfa_backup_codes::Entity::find()
             .filter(mfa_backup_codes::Column::UserId.eq(*user_id))
@@ -201,9 +244,11 @@ impl MFAService {
         Ok(backup_codes)
     }
     
-    async fn clear_backup_codes(user_id: &Uuid) -> Result<(), String> {
-        let db = DbService::get().await
-            .map_err(|e| format!("Failed to get database connection: {}", e))?;
+    async fn clear_backup_codes(
+        &self,
+        user_id: &Uuid
+    ) -> Result<(), String> {
+        let db = &self.state.db;
         
         mfa_backup_codes::Entity::delete_many()
             .filter(mfa_backup_codes::Column::UserId.eq(*user_id))
@@ -212,5 +257,41 @@ impl MFAService {
             .map_err(|e| format!("Failed to clear backup codes: {}", e))?;
         
         Ok(())
+    }
+
+    pub async fn verify_code(
+        &self,
+        user_id: &Uuid,
+        request: MFALoginRequest
+    ) -> Result<(), String> {
+        let user_service = UserService::new(self.state.clone());
+        let user = user_service.get_user_by_id(&user_id)
+            .await
+            .map_err(|e| format!("Failed to fetch user: {}", e))?
+            .ok_or_else(|| "User not found")?;
+
+        if let Some(secret) = user.totp_secret {
+            let is_valid = if request.is_backup_code {
+                self.verify_backup_code(
+                    &user.id,
+                    &request.mfa_code
+                ).await
+            } else {
+                self.verify_totp_code(
+                    &user.email,
+                    &request.mfa_code,
+                    &secret
+                ).await
+            };
+
+            match is_valid {
+                Ok(true) => Ok(()),
+                Ok(false) => Err("MFA code is invalid".to_string()),
+                Err(e) => Err(format!("Failed to verify code: {}", e)),
+            }
+
+        } else {
+            Err("MFA is not enabled for this user".to_string())
+        }
     }
 }
