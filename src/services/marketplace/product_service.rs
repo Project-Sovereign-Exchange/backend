@@ -4,6 +4,8 @@ use crate::entities::products;
 use crate::handlers::marketplace::product_handler::{CreateProductRequest, UpdateProductRequest};
 use uuid::Uuid;
 use crate::app_state::AppState;
+use crate::entities::products::string_to_product_category;
+use crate::services::integrations::meilisearch_service::MeilisearchService;
 
 pub struct ProductService {
     pub state: AppState,
@@ -20,19 +22,32 @@ impl ProductService {
     ) -> Result<products::Model, String> {
         let db = &self.state.db;
 
+        let category = string_to_product_category(&request.category)
+            .ok_or("Invalid product category")?;
+
         let product = products::ActiveModel {
             id: Set(Uuid::new_v4()),
             name: Set(request.name),
             image_url: Set(request.image_url),
             game: Set(request.game),
             expansion: Set(request.expansion),
+            category: Set(category),
+            subcategory: Set(request.subcategory),
             metadata: Set(request.metadata),
             created_at: Set(chrono::Utc::now()),
             updated_at: Set(chrono::Utc::now()),
         };
 
-        product.insert(db).await
+        let product: products::Model = product.insert(db).await
             .map_err(|e| format!("Failed to create product: {}", e))
+            .map(|model| model.into())?;
+        
+        let search_service = MeilisearchService::new(self.state.clone());
+        
+        match search_service.index_product(&product).await {
+            Ok(_) => Ok(product),
+            Err(e) => Err(format!("Failed to index product: {}", e)),
+        }
     }
 
     pub async fn update_product(

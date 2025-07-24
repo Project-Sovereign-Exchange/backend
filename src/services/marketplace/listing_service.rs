@@ -2,8 +2,7 @@ use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::entities::listings;
-use crate::entities::listings::{string_to_card_condition, ListingStatus};
-use crate::entities::users::ActiveModel;
+use crate::entities::listings::{string_to_condition, ListingStatus};
 use crate::handlers::marketplace::listing_handler::{CreateListingRequest, UpdateListingRequest};
 use crate::services::account::user_service::UserService;
 use crate::services::integrations::stripe_service::StripeService;
@@ -44,7 +43,7 @@ impl ListingService {
         ).await
         .map_err(|e| format!("Failed to create Stripe product: {}", e))?;
         
-        let condition = string_to_card_condition(
+        let condition = string_to_condition(
             &request.condition
         ).ok_or_else(|| "condition not defined".to_string())?;
         
@@ -100,8 +99,8 @@ impl ListingService {
         }
 
         if let Some(condition) = request.condition {
-            let card_condition = string_to_card_condition(&condition)
-                .ok_or_else(|| "Invalid card condition".to_string())?;
+            let card_condition = string_to_condition(&condition)
+                .ok_or_else(|| "Invalid condition".to_string())?;
             listing.condition = Set(card_condition);
         }
 

@@ -2,6 +2,19 @@ use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
+use serde_json::error::Category;
+use crate::entities::listings::Condition;
+
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "product_category")]
+pub enum ProductCategory {
+    #[sea_orm(string_value = "card")]
+    Card,
+    #[sea_orm(string_value = "sealed")]
+    Sealed,
+    #[sea_orm(string_value = "uncategorized")]
+    Accessory,
+}
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "products")]
@@ -12,6 +25,8 @@ pub struct Model {
     pub image_url: Option<String>,
     pub game: String,
     pub expansion: Option<String>,
+    pub category: ProductCategory,
+    pub subcategory: Option<String>,
     #[sea_orm(column_type = "Json")]
     pub metadata: JsonValue,
     pub created_at: DateTimeUtc,
@@ -64,5 +79,14 @@ impl Model {
     
     pub fn has_metadata_key(&self, key: &str) -> bool {
         self.metadata.get(key).is_some()
+    }
+}
+
+pub fn string_to_product_category(category: &str) -> Option<ProductCategory> {
+    match category.to_lowercase().as_str() {
+        "card" => Some(ProductCategory::Card),
+        "sealed" => Some(ProductCategory::Sealed),
+        "accessory" => Some(ProductCategory::Accessory),
+        _ => None,
     }
 }

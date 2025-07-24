@@ -130,7 +130,7 @@ impl StripeService {
         price: i64,
     ) -> Result<StripeProduct, String> {
         let key: &str = Config::get().stripe_key.as_ref();
-        let client = reqwest::Client::new();
+        let client = Client::new();
 
         let product_url = "https://api.stripe.com/v1/products";
         let mut product_params = vec![

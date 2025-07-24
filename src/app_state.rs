@@ -1,15 +1,18 @@
 use std::env;
 use std::sync::Arc;
 use std::time::Duration;
+use reqwest::Client;
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use tracing::log;
 use crate::config::config::Config;
+use crate::services::integrations::meilisearch_service::MeilisearchService;
 use crate::services::integrations::stripe_service::StripeClient;
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: DatabaseConnection,
     pub stripe_client: Arc<StripeClient>,
+    pub meilisearch_client: Arc<meilisearch_sdk::client::Client>,
 }
 
 impl AppState {
@@ -29,10 +32,16 @@ impl AppState {
         let db = Database::connect(db_options).await?;
         
         let stripe_client = Arc::new(StripeClient::new());
+
+        let meilisearch_client = Arc::new(
+            meilisearch_sdk::client::Client::new("http://localhost:7700", Some("your-master-key"))
+                .unwrap_or_else(|e| panic!("Failed to initialize client: {}", e))
+        );
         
         Ok(Self {
             db,
             stripe_client,
+            meilisearch_client,
         })
     }
 }

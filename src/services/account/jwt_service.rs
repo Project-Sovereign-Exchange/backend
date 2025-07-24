@@ -38,6 +38,31 @@ pub struct JwtService {
 }
 
 impl JwtService {
+    pub fn new(state: AppState) -> Self {
+        Self { state }
+    }
+    
+    pub async fn generate_admin_token(user_id: Uuid) -> Result<String, String> {
+        let claims = Claims {
+            sub: user_id,
+            purpose: "admin".to_string(),
+            exp: (chrono::Utc::now() + chrono::Duration::hours(3)).timestamp() as usize,
+            iat: chrono::Utc::now().timestamp() as usize,
+            jti: Uuid::new_v4().to_string(),
+            scope: Some(vec!["admin".to_string()]),
+        };
+        
+        let secret = env::var("JWT_SECRET")
+            .map_err(|e| format!("JWT_SECRET must be set: {}", e))?;
+        
+        let token = encode(
+            &jsonwebtoken::Header::default(),
+            &claims,
+            &jsonwebtoken::EncodingKey::from_secret(secret.as_ref())
+        ).map_err(|e| e.to_string())?;
+        
+        Ok(token)
+    }
 
     pub async fn generate_access_token(user_id: Uuid) -> Result<String, String> {
         

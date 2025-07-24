@@ -9,6 +9,8 @@ pub struct CreateProductRequest {
     pub image_url: Option<String>,
     pub game: String,
     pub expansion: Option<String>,
+    pub category: String,
+    pub subcategory: Option<String>,
     pub metadata: serde_json::Value,
 }
 

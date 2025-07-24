@@ -4,23 +4,28 @@ use prometheus::register;
 pub mod account;
 pub mod marketplace;
 pub mod transactions;
+mod admin;
 
 pub fn configure_admin_routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::scope("/api/admin").service(web::scope("/v1").configure(admin_routes)));
+    cfg.service(web::scope("/api/v1/admin").configure(admin_routes));
 }
 
 pub fn configure_private_routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::scope("/api/private").service(web::scope("/v1").configure(private_routes)));
+    cfg.service(web::scope("/api/v1/private").configure(private_routes));
 }
 
 pub fn configure_public_routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::scope("/api/public").service(web::scope("/v1").configure(public_routes)));
+    cfg.service(web::scope("/api/v1/public").configure(public_routes));
 }
 
 fn admin_routes(cfg: &mut web::ServiceConfig) {}
 
 fn private_routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::scope("/auth").service(account::auth_handler::logout))
+        cfg.service(
+            web::scope("/auth")
+                .service(account::auth_handler::get_current_user)
+                .service(account::auth_handler::logout)
+        )
         .service(
             web::scope("/mfa")
                 .service(account::mfa_handler::setup_mfa)

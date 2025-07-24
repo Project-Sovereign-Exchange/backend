@@ -4,4 +4,4 @@ pub mod oauth_service;
 pub mod storj_service;
 pub mod redis_service;
 pub mod cookie_service;
-mod clients;
+pub mod meilisearch_service;

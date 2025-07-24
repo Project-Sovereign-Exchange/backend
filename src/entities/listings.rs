@@ -1,5 +1,6 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
+use crate::entities::products::ProductCategory;
 
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "listing_status")]
@@ -16,7 +17,7 @@ pub enum ListingStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "card_condition")]
-pub enum CardCondition {
+pub enum Condition {
     #[sea_orm(string_value = "mint")]
     Mint,
     #[sea_orm(string_value = "near_mint")]
@@ -29,6 +30,12 @@ pub enum CardCondition {
     HeavilyPlayed,
     #[sea_orm(string_value = "damaged")]
     Damaged,
+    #[sea_orm(string_value = "new")]
+    New,
+    #[sea_orm(string_value = "used")]
+    Used,
+    #[sea_orm(string_value = "sealed")]
+    Sealed,
 }
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
@@ -39,7 +46,7 @@ pub struct Model {
     pub product_id: Uuid,
     pub seller_id: Uuid,
     pub price: i64,
-    pub condition: CardCondition,
+    pub condition: Condition,
     pub quantity: i64,
     pub reserved_quantity: i64,
     pub status: ListingStatus,
@@ -100,14 +107,60 @@ impl Model {
     }
 }
 
-pub fn string_to_card_condition(condition: &str) -> Option<CardCondition> {
+impl Condition {
+    pub fn valid_for_category(&self, category: &ProductCategory) -> bool {
+        match (self, category) {
+            // Card conditions
+            (Condition::Mint | Condition::NearMint | Condition::LightlyPlayed |
+            Condition::ModeratelyPlayed | Condition::HeavilyPlayed | Condition::Damaged,
+                ProductCategory::Card) => true,
+            // Accessory conditions
+            (Condition::New | Condition::Used, ProductCategory::Accessory) => true,
+            // Sealed conditions
+            (Condition::Sealed, ProductCategory::Sealed) => true,
+            _ => false,
+        }
+    }
+
+    pub fn card_conditions() -> Vec<Condition> {
+        vec![
+            Condition::Mint,
+            Condition::NearMint,
+            Condition::LightlyPlayed,
+            Condition::ModeratelyPlayed,
+            Condition::HeavilyPlayed,
+            Condition::Damaged,
+        ]
+    }
+
+    pub fn accessory_conditions() -> Vec<Condition> {
+        vec![Condition::New, Condition::Used]
+    }
+    
+    pub fn sealed_conditions() -> Vec<Condition> {
+        vec![Condition::Sealed]
+    }
+}
+
+pub fn string_to_condition(condition: &str) -> Option<Condition> {
     match condition.to_lowercase().as_str() {
-        "mint" => Some(CardCondition::Mint),
-        "near_mint" => Some(CardCondition::NearMint),
-        "lightly_played" => Some(CardCondition::LightlyPlayed),
-        "moderately_played" => Some(CardCondition::ModeratelyPlayed),
-        "heavily_played" => Some(CardCondition::HeavilyPlayed),
-        "damaged" => Some(CardCondition::Damaged),
+        "mint" => Some(Condition::Mint),
+        "near_mint" => Some(Condition::NearMint),
+        "lightly_played" => Some(Condition::LightlyPlayed),
+        "moderately_played" => Some(Condition::ModeratelyPlayed),
+        "heavily_played" => Some(Condition::HeavilyPlayed),
+        "damaged" => Some(Condition::Damaged),
+        "new" => Some(Condition::New),
+        "used" => Some(Condition::Used),
+        "sealed" => Some(Condition::Sealed),
         _ => None,
+    }
+}
+
+pub fn get_valid_conditions_for_category(category: &ProductCategory) -> Vec<Condition> {
+    match category {
+        ProductCategory::Card => Condition::card_conditions(),
+        ProductCategory::Accessory => Condition::accessory_conditions(),
+        ProductCategory::Sealed => Condition::sealed_conditions(),
     }
 }

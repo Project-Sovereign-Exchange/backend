@@ -1,11 +1,11 @@
-use actix_web::{post, web, HttpResponse, Responder, Result};
+use actix_web::{get, post, web, HttpResponse, Responder, Result};
 use actix_web::cookie::{Cookie, SameSite};
 use actix_web::http::header;
 use futures_util::TryFutureExt;
 use serde::{Deserialize, Serialize};
 use crate::app_state::AppState;
 use crate::services::account::auth_service::{AuthService, AuthenticatedUser};
-use crate::services::account::jwt_service::JwtService;
+use crate::services::account::jwt_service::{Claims, JwtService};
 use crate::services::account::user_service::UserService;
 use crate::services::integrations::cookie_service::CookieService;
 use crate::utils::validator_util::ValidatorUtil;
@@ -47,7 +47,23 @@ async fn login(
     }
 }
 
-
+#[get("/me")]
+async fn get_current_user(
+    state: web::Data<AppState>,
+    claims: Claims,
+) -> Result<impl Responder> {
+    let user_service = UserService::new(state.as_ref().clone());
+    
+    match user_service.get_user_by_id(&claims.sub).await {
+        Ok(Some(user)) => Ok(HttpResponse::Ok().json(LoginResponse {
+            user_id: user.id,
+            username: user.username.unwrap_or_default(),
+            email: user.email,
+        })),
+        Ok(None) => Err(actix_web::error::ErrorNotFound("User not found")),
+        Err(e) => Err(actix_web::error::ErrorInternalServerError(e)),
+    }
+}
 
 //Register Route
 #[derive(Deserialize)]
