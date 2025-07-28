@@ -1,7 +1,9 @@
-use actix_web::{post, web, Responder, Result};
+use actix_web::{get, post, web, HttpResponse, Responder, Result};
 use crate::app_state::AppState;
 use crate::services::account::auth_service::AuthService;
 use crate::services::integrations::cookie_service::CookieService;
+use crate::services::account::jwt_service::Claims;
+use crate::services::admin::admin_service::AdminService;
 
 #[derive(serde::Deserialize)]
 struct AdminLoginRequest {
@@ -36,5 +38,23 @@ async fn login(
         Err (e) => Err(
             actix_web::error::ErrorUnauthorized(e)
         ),
+    }
+}
+
+#[get("/me")]
+async fn get_current_admin(
+    state: web::Data<AppState>,
+    claims: Claims,
+) -> Result<impl Responder> {
+    let admin_service = AdminService::new(state.as_ref().clone());
+
+    match admin_service.get_admin_by_id(&claims.sub).await {
+        Ok(Some(admin)) => Ok(HttpResponse::Ok().json(AdminLoginResponse {
+            user_id: admin.id,
+            username: admin.username,
+            email: admin.email,
+        })),
+        Ok(None) => Err(actix_web::error::ErrorNotFound("Admin not found")),
+        Err(e) => Err(actix_web::error::ErrorInternalServerError(e)),
     }
 }

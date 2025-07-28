@@ -9,6 +9,7 @@ pub struct CreateProductRequest {
     pub image_url: Option<String>,
     pub game: String,
     pub expansion: Option<String>,
+    pub set_number: Option<String>,
     pub category: String,
     pub subcategory: Option<String>,
     pub metadata: serde_json::Value,
@@ -86,4 +87,64 @@ pub async fn get_product(
         }
     }
 }
+
+#[derive(Deserialize)]
+pub struct ProductQuery {
+    pub offset: Option<u64>,
+    pub limit: Option<u64>,
+}
+
+#[get("")]
+pub async fn get_products(
+    state: web::Data<AppState>,
+    query: web::Query<ProductQuery>,
+) -> Result<impl Responder> {
+    let offset = query.offset.unwrap_or(0);
+    let limit = query.limit.unwrap_or(10);
+    let product_service = ProductService::new(state.as_ref().clone());
+
+    let total_number = product_service.get_number_of_products()
+        .await
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Failed to get total number of products"))?;
+
+    if limit == 0 {
+        return Err(actix_web::error::ErrorBadRequest("Limit must be greater than 0"));
+    }
+
+    if offset > total_number {
+        return Err(actix_web::error::ErrorBadRequest("Offset exceeds total number of products"));
+    }
+
+    match product_service.get_products(offset, limit).await {
+        Ok(products) => {
+            Ok(actix_web::HttpResponse::Ok().json(
+                serde_json::json!({
+                    "products": products,
+                    "offset": offset,
+                    "limit": limit,
+                    "total": total_number,
+                    "more": offset + limit < total_number
+                })
+            ))},
+        Err(e) => {
+            println!("Failed to get products: {}", e);
+            Err(actix_web::error::ErrorInternalServerError("Products failed to query"))
+        }
+    }
+}
+
+#[get("/count")]
+pub async fn get_number_of_products(
+    state: web::Data<AppState>,
+) -> Result<impl Responder> {
+    let product_service = ProductService::new(state.as_ref().clone());
+
+    match product_service.get_number_of_products().await {
+        Ok(count) => Ok(actix_web::HttpResponse::Ok().json(count)),
+        Err(e) => {
+            Err(actix_web::error::ErrorInternalServerError("Failed to count products"))
+        }
+    }
+}
+
 

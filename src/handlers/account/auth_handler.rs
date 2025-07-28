@@ -1,8 +1,10 @@
+use actix_web::HttpRequest;
 use actix_web::{get, post, web, HttpResponse, Responder, Result};
 use actix_web::cookie::{Cookie, SameSite};
 use actix_web::http::header;
 use futures_util::TryFutureExt;
 use serde::{Deserialize, Serialize};
+use tracing::log;
 use crate::app_state::AppState;
 use crate::services::account::auth_service::{AuthService, AuthenticatedUser};
 use crate::services::account::jwt_service::{Claims, JwtService};
@@ -33,7 +35,7 @@ async fn login(
     
     match auth_service.authenticate_user(&request.email, &request.password).await {
         Ok (authenticated_user) => {
-            Ok(actix_web::HttpResponse::Ok()
+            Ok(HttpResponse::Ok()
                 .cookie(CookieService::auth_cookie(&authenticated_user.token))
                 .json(LoginResponse {
                     user_id: authenticated_user.user.id,
@@ -90,8 +92,15 @@ pub async fn register(
 //Logout Route
 #[post("/logout")]
 async fn logout() -> Result<impl Responder> {
-    // Invalidate the user's session or token here
-    Ok(actix_web::HttpResponse::Ok().json("User logged out successfully"))
+
+    let logout_cookie = CookieService::logout_cookie();
+
+    Ok(HttpResponse::Ok()
+        .cookie(logout_cookie)
+        .json(serde_json::json!({
+            "message": "Logged out successfully",
+            "success": true
+        })))
 }
 
 

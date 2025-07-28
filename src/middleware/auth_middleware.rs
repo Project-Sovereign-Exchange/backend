@@ -95,6 +95,14 @@ where
                         return Ok(req.into_response(response));
                     }
                 }
+                "admin" => {
+                    if !path.starts_with("/admin") {
+                        let response = HttpResponse::Forbidden().json(serde_json::json!({
+                            "error": "Admin token can only access admin endpoints"
+                        }));
+                        return Ok(req.into_response(response));
+                    }
+                }
                 _ => {
                     let response = HttpResponse::Unauthorized().json(serde_json::json!({
                         "error": "Invalid token purpose"

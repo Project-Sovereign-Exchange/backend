@@ -25,6 +25,7 @@ pub struct Model {
     pub image_url: Option<String>,
     pub game: String,
     pub expansion: Option<String>,
+    pub set_number: Option<String>,
     pub category: ProductCategory,
     pub subcategory: Option<String>,
     #[sea_orm(column_type = "Json")]

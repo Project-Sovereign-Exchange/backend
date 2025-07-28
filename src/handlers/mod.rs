@@ -52,7 +52,9 @@ fn public_routes(cfg: &mut web::ServiceConfig) {
             web::scope("/product")
                 .service(marketplace::product_handler::create_product)
                 .service(marketplace::product_handler::update_product)
-                .service(marketplace::product_handler::delete_product),
+                .service(marketplace::product_handler::delete_product)
+                .service(marketplace::product_handler::get_products)
+                .service(marketplace::product_handler::get_number_of_products),
         )
         .service(
             web::scope("/listing")

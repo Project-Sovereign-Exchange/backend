@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, EntityTrait, QuerySelect, Set, PaginatorTrait};
 use crate::entities::products;
 use crate::handlers::marketplace::product_handler::{CreateProductRequest, UpdateProductRequest};
 use uuid::Uuid;
@@ -31,6 +31,7 @@ impl ProductService {
             image_url: Set(request.image_url),
             game: Set(request.game),
             expansion: Set(request.expansion),
+            set_number: Set(request.set_number),
             category: Set(category),
             subcategory: Set(request.subcategory),
             metadata: Set(request.metadata),
@@ -106,5 +107,31 @@ impl ProductService {
             .one(db)
             .await
             .map_err(|e| format!("Failed to fetch product: {}", e))
+    }
+
+    pub async fn get_products(
+        &self,
+        offset: u64,
+        limit: u64,
+    ) -> Result<Vec<products::Model>, String> {
+        let db = &self.state.db;
+
+        products::Entity::find()
+            .offset(offset)
+            .limit(limit)
+            .all(db)
+            .await
+            .map_err(|e| format!("Failed to fetch products: {}", e))
+    }
+
+    pub async fn get_number_of_products(
+        &self,
+    ) -> Result<u64, String> {
+        let db = &self.state.db;
+
+        products::Entity::find()
+            .count(db)
+            .await
+            .map_err(|e| format!("Failed to count products: {}", e))
     }
 }
