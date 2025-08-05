@@ -6,6 +6,7 @@ use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use tracing::log;
 use crate::config::config::Config;
 use crate::services::integrations::meilisearch_service::MeilisearchService;
+use crate::services::integrations::r2_service::R2Client;
 use crate::services::integrations::stripe_service::StripeClient;
 
 #[derive(Clone)]
@@ -13,6 +14,7 @@ pub struct AppState {
     pub db: DatabaseConnection,
     pub stripe_client: Arc<StripeClient>,
     pub meilisearch_client: Arc<meilisearch_sdk::client::Client>,
+    pub r2_client: Arc<R2Client>
 }
 
 impl AppState {
@@ -37,11 +39,21 @@ impl AppState {
             meilisearch_sdk::client::Client::new("http://localhost:7700", Some("your-master-key"))
                 .unwrap_or_else(|e| panic!("Failed to initialize client: {}", e))
         );
+
+        let r2_client = Arc::new(
+            R2Client::new(
+                &config.r2_account_id,
+                &config.r2_access_key_id,
+                &config.r2_secret_access_key,
+                &config.r2_custom_domain,
+            ).await?
+        );
         
         Ok(Self {
             db,
             stripe_client,
             meilisearch_client,
+            r2_client,
         })
     }
 }

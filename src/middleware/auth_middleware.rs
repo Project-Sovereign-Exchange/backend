@@ -53,7 +53,6 @@ where
         let service = Rc::clone(&self.service);
 
         Box::pin(async move {
-            // Extract JWT token from HTTP-only cookie
             let token = match extract_jwt_from_cookie(&req) {
                 Some(token) => token,
                 None => {
@@ -79,7 +78,7 @@ where
 
             match claims.purpose.as_str() {
                 "temporary" => {
-                    if !(path == "/mfa/verify") {
+                    if path != "/mfa/verify" {
                         let response = HttpResponse::Forbidden()
                                 .json(serde_json::json!({
                                     "error": "MFA verification required. This token can only access MFA verification endpoints."
@@ -95,14 +94,7 @@ where
                         return Ok(req.into_response(response));
                     }
                 }
-                "admin" => {
-                    if !path.starts_with("/admin") {
-                        let response = HttpResponse::Forbidden().json(serde_json::json!({
-                            "error": "Admin token can only access admin endpoints"
-                        }));
-                        return Ok(req.into_response(response));
-                    }
-                }
+                "admin" => {}
                 _ => {
                     let response = HttpResponse::Unauthorized().json(serde_json::json!({
                         "error": "Invalid token purpose"

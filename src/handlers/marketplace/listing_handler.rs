@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+use actix_multipart::Multipart;
 use serde::Deserialize;
 use actix_web::{Responder, Result, web, post, get, delete};
-use sea_orm::prelude::Decimal;
+use futures_util::TryStreamExt;
+use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::services::account::jwt_service::Claims;
 use crate::services::marketplace::listing_service::ListingService;
@@ -8,7 +11,7 @@ use crate::services::marketplace::product_service::ProductService;
 
 #[derive(Deserialize)]
 pub struct CreateListingRequest {
-    pub product_id: uuid::Uuid,
+    pub product_id: Uuid,
     pub price: i64,
     pub condition: String,
     pub quantity: i64,
@@ -18,7 +21,7 @@ pub struct CreateListingRequest {
 
 #[derive(Deserialize)]
 pub struct UpdateListingRequest {
-    pub id: uuid::Uuid,
+    pub id: Uuid,
     pub price: Option<i64>,
     pub condition: Option<String>,
     pub quantity: Option<i64>,

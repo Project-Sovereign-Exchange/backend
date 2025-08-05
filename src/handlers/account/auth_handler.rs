@@ -20,10 +20,19 @@ struct LoginRequest {
 }
 
 #[derive(Serialize)]
-struct LoginResponse {
-    pub user_id: uuid::Uuid,
-    pub username: String,
+pub struct MeResponse {
+    pub user: UserResponse,
+    pub token_purpose: String,
+    pub issued_at: i64,
+}
+
+#[derive(Serialize)]
+pub struct UserResponse {
+    pub id: String,
     pub email: String,
+    pub username: String,
+    pub roles: Vec<String>,
+    pub permissions: Vec<String>,
 }
 
 #[post("/login")]
@@ -37,11 +46,10 @@ async fn login(
         Ok (authenticated_user) => {
             Ok(HttpResponse::Ok()
                 .cookie(CookieService::auth_cookie(&authenticated_user.token))
-                .json(LoginResponse {
-                    user_id: authenticated_user.user.id,
-                    username: authenticated_user.user.username.unwrap_or_default(),
-                    email: authenticated_user.user.email,
-                }))
+                .json(serde_json::json!({
+                    "message": "Login successful",
+                    "success": true,
+                })))
         }
         Err (e) => Err(
             actix_web::error::ErrorUnauthorized(e)
@@ -57,10 +65,16 @@ async fn get_current_user(
     let user_service = UserService::new(state.as_ref().clone());
     
     match user_service.get_user_by_id(&claims.sub).await {
-        Ok(Some(user)) => Ok(HttpResponse::Ok().json(LoginResponse {
-            user_id: user.id,
-            username: user.username.unwrap_or_default(),
-            email: user.email,
+        Ok(Some(user)) => Ok(HttpResponse::Ok().json(MeResponse {
+            user: UserResponse {
+                id: user.id.to_string(),
+                email: user.email,
+                username: user.username.unwrap_or_default(),
+                roles: claims.roles,
+                permissions: claims.permissions,
+            },
+            token_purpose: claims.purpose,
+            issued_at: claims.iat as i64,
         })),
         Ok(None) => Err(actix_web::error::ErrorNotFound("User not found")),
         Err(e) => Err(actix_web::error::ErrorInternalServerError(e)),
@@ -72,6 +86,8 @@ async fn get_current_user(
 pub struct RegisterRequest {
     pub username: String,
     pub password: String,
+    #[serde(rename = "confirmPassword")]
+    pub confirm_password: String,
     pub email: String,
 }
 

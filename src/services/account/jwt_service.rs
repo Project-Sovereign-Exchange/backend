@@ -1,4 +1,5 @@
 use std::env;
+use std::fs::Permissions;
 use actix_web::{Error, FromRequest, HttpMessage, HttpRequest};
 use actix_web::dev::Payload;
 use config::Config;
@@ -15,8 +16,8 @@ pub struct Claims {
     pub exp: usize,
     pub iat: usize,
     pub jti: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    scope: Option<Vec<String>>,
+    pub roles: Vec<String>,
+    pub permissions: Vec<String>,
 }
 
 impl FromRequest for Claims {
@@ -49,7 +50,8 @@ impl JwtService {
             exp: (chrono::Utc::now() + chrono::Duration::hours(3)).timestamp() as usize,
             iat: chrono::Utc::now().timestamp() as usize,
             jti: Uuid::new_v4().to_string(),
-            scope: Some(vec!["admin".to_string()]),
+            roles: vec!["admin".to_string()],
+            permissions: vec!["all".to_string()],
         };
         
         let secret = env::var("JWT_SECRET")
@@ -72,7 +74,8 @@ impl JwtService {
             exp: (chrono::Utc::now() + chrono::Duration::hours(3)).timestamp() as usize,
             iat: chrono::Utc::now().timestamp() as usize,
             jti: Uuid::new_v4().to_string(),
-            scope: None,
+            roles: vec!["user".to_string()],
+            permissions: vec!["none".to_string()],
         };
         
         let secret = env::var("JWT_SECRET")
@@ -94,7 +97,8 @@ impl JwtService {
             exp: (chrono::Utc::now() + chrono::Duration::minutes(5)).timestamp() as usize,
             iat: chrono::Utc::now().timestamp() as usize,
             jti: Uuid::new_v4().to_string(),
-            scope: None,
+            roles: vec!["user".to_string()],
+            permissions: vec!["none".to_string()],
         };
         
         let secret = env::var("JWT_SECRET")

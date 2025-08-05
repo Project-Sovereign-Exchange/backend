@@ -57,6 +57,8 @@ pub enum Relation {
     UserSessions,
     #[sea_orm(has_many = "super::address_history::Entity")]
     AddressHistory,
+    #[sea_orm(has_many = "super::user_roles::Entity")]
+    UserRoles,
 }
 
 impl Related<super::mfa_backup_codes::Entity> for Entity {
@@ -86,6 +88,12 @@ impl Related<super::user_sessions::Entity> for Entity {
 impl Related<super::address_history::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::AddressHistory.def()
+    }
+}
+
+impl Related<super::user_roles::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::UserRoles.def()
     }
 }
 

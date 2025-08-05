@@ -1,5 +1,5 @@
 use crate::app_state::AppState;
-use crate::entities::{admin_users, users};
+use crate::entities::{users};
 use crate::handlers::account::auth_handler::RegisterRequest;
 use crate::services::account::jwt_service::JwtService;
 use crate::services::account::user_service::UserService;
@@ -12,18 +12,6 @@ pub struct AuthenticatedUser {
     pub token: String,
 }
 
-#[derive(Debug)]
-pub struct AuthenticatedAdmin {
-    pub user: admin_users::Model,
-    pub token: String,
-}
-
-#[derive(Debug)]
-pub enum Account {
-    User(AuthenticatedUser),
-    Admin(AuthenticatedAdmin),
-}
-
 pub struct AuthService {
     state: AppState,
 }
@@ -32,49 +20,6 @@ impl AuthService {
     
     pub fn new(state: AppState) -> Self {
         Self { state }
-    }
-
-    pub async fn authenticate_admin(
-        &self,
-        email: &str,
-        password: &str) -> Result<AuthenticatedAdmin, String> {
-        let authenticated_admin;
-
-        if email.is_empty() || password.is_empty() {
-            return Err("Username and password cannot be empty".to_string());
-        }
-
-        match ValidatorUtil::validate_email(email) {
-            Ok(_) => {}
-            Err(e) => return Err(e.to_string()),
-        }
-
-        let admin_service = AdminService::new(self.state.clone());
-
-        match admin_service.get_admin_by_email(&email).await {
-            Ok(Some(admin)) => {
-                if bcrypt::verify(password, &admin.password_hash).unwrap_or(false) {
-
-                    let token = JwtService::generate_admin_token(admin.id).await
-                        .map_err(|_| "Error generating token".to_string())?;
-
-                    authenticated_admin = AuthenticatedAdmin {
-                        user: admin.clone(),
-                        token,
-                    };
-
-                    Ok(authenticated_admin)
-                } else {
-                    Err("Invalid username or password".to_string())
-                }
-            }
-            Ok(None) => {
-                Err("Invalid username or password".to_string())
-            }
-            Err(_) => {
-                Err("Invalid username or password".to_string())
-            }
-        }
     }
 
     pub async fn authenticate_user(
@@ -100,7 +45,13 @@ impl AuthService {
                     
                     let token = match user.totp_enabled {
                         true => JwtService::generate_temporary_token(user.id).await,
-                        false => JwtService::generate_access_token(user.id).await,
+                        false => {
+                            match AdminService::new(self.state.clone()).is_admin(&user.id).await {
+                                Ok(true) => JwtService::generate_admin_token(user.id).await,
+                                Ok(false) => JwtService::generate_access_token(user.id).await,
+                                Err(e) => return Err(e.to_string()),
+                            }
+                        }
                     }.map_err(|_| "Error generating token".to_string())?;
                     
                     authenticated_user = AuthenticatedUser {
@@ -134,6 +85,10 @@ impl AuthService {
         match ValidatorUtil::validate_password(&request.password) {
             Ok(_) => {},
             Err(e) => return Err(e.to_string()),
+        }
+
+        if request.password != request.confirm_password {
+            return Err("Passwords do not match".to_string());
         }
         
         match ValidatorUtil::validate_username(&request.username) {

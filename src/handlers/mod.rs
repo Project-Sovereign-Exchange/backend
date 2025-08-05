@@ -38,6 +38,13 @@ fn private_routes(cfg: &mut web::ServiceConfig) {
                 .service(marketplace::listing_handler::create_listing)
                 .service(marketplace::listing_handler::update_listing)
                 .service(marketplace::listing_handler::delete_listing)
+        )
+        .service(
+            web::scope("/product")
+                .service(marketplace::product_handler::create_product)
+                .service(marketplace::product_handler::update_product)
+                .service(marketplace::product_handler::delete_product)
+                .service(marketplace::product_handler::upload_product_images)
         );
 }
 
@@ -50,9 +57,6 @@ fn public_routes(cfg: &mut web::ServiceConfig) {
         )
         .service(
             web::scope("/product")
-                .service(marketplace::product_handler::create_product)
-                .service(marketplace::product_handler::update_product)
-                .service(marketplace::product_handler::delete_product)
                 .service(marketplace::product_handler::get_products)
                 .service(marketplace::product_handler::get_number_of_products),
         )

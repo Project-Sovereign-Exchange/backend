@@ -12,8 +12,10 @@ pub enum ProductCategory {
     Card,
     #[sea_orm(string_value = "sealed")]
     Sealed,
-    #[sea_orm(string_value = "uncategorized")]
+    #[sea_orm(string_value = "accessory")]
     Accessory,
+    #[sea_orm(string_value = "other")]
+    Other,
 }
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]

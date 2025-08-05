@@ -7,7 +7,9 @@ pub mod address_history;
 pub mod token_blacklist;
 pub mod products;
 pub mod listings;
-pub mod admin_users;
+pub mod user_roles;
+mod games;
+mod sets;
 
 pub use users::Entity as Users;
 pub use mfa_backup_codes::Entity as MfaBackupCodes;

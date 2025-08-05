@@ -11,6 +11,10 @@ pub struct Config {
     pub host: String,
     pub port: u16,
     pub stripe_key: String,
+    pub r2_account_id: String,
+    pub r2_access_key_id: String,
+    pub r2_secret_access_key: String,
+    pub r2_custom_domain: String,
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
@@ -51,6 +55,26 @@ impl Config {
             stripe_key: env::var("STRIPE_KEY")
                 .map_err(|e| {
                     MessageUtil::error(&format!("STRIPE_KEY must be set: {}", e));
+                    ()
+                })?,
+            r2_account_id: env::var("R2_ACCOUNT_ID")
+                .map_err(|e| {
+                    MessageUtil::error(&format!("R2_ACCOUNT_ID must be set: {}", e));
+                    ()
+                })?,
+            r2_access_key_id: env::var("R2_ACCESS_KEY_ID")
+                .map_err(|e| {
+                    MessageUtil::error(&format!("R2_ACCESS_KEY_ID must be set: {}", e));
+                    ()
+                })?,
+            r2_secret_access_key: env::var("R2_SECRET_ACCESS_KEY")
+                .map_err(|e| {
+                    MessageUtil::error(&format!("R2_SECRET_ACCESS_KEY must be set: {}", e));
+                    ()
+                })?,
+            r2_custom_domain: env::var("R2_CUSTOM_DOMAIN")
+                .map_err(|e| {
+                    MessageUtil::error(&format!("R2_CUSTOM_DOMAIN must be set: {}", e));
                     ()
                 })?,
         })

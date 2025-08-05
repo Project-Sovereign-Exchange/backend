@@ -1,4 +1,5 @@
 use actix_web::cookie::{Cookie, SameSite};
+use actix_web::cookie::time::Duration;
 
 pub struct CookieService;
 
@@ -10,6 +11,7 @@ impl CookieService {
             .secure(true)
             .same_site(SameSite::None)
             .path("/")
+            .max_age(Duration::hours(3))
             .finish()
     }
 
@@ -20,7 +22,7 @@ impl CookieService {
             .secure(true)
             .same_site(SameSite::None)
             .path("/")
-            .max_age(actix_web::cookie::time::Duration::seconds(-1))
+            .max_age(Duration::seconds(-1))
             .finish()
     }
 }

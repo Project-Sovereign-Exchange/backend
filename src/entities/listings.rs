@@ -110,13 +110,10 @@ impl Model {
 impl Condition {
     pub fn valid_for_category(&self, category: &ProductCategory) -> bool {
         match (self, category) {
-            // Card conditions
             (Condition::Mint | Condition::NearMint | Condition::LightlyPlayed |
             Condition::ModeratelyPlayed | Condition::HeavilyPlayed | Condition::Damaged,
                 ProductCategory::Card) => true,
-            // Accessory conditions
             (Condition::New | Condition::Used, ProductCategory::Accessory) => true,
-            // Sealed conditions
             (Condition::Sealed, ProductCategory::Sealed) => true,
             _ => false,
         }
@@ -162,5 +159,6 @@ pub fn get_valid_conditions_for_category(category: &ProductCategory) -> Vec<Cond
         ProductCategory::Card => Condition::card_conditions(),
         ProductCategory::Accessory => Condition::accessory_conditions(),
         ProductCategory::Sealed => Condition::sealed_conditions(),
+        ProductCategory::Other => Condition::accessory_conditions()
     }
 }
