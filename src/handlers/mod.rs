@@ -1,10 +1,19 @@
+
 use actix_web::web;
-use prometheus::register;
+use serde::{Deserialize, Serialize};
 
 pub mod account;
 pub mod marketplace;
 pub mod transactions;
-mod admin;
+pub mod admin;
+pub mod integrations;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiResponse<T> {
+    pub success: bool,
+    pub message: String,
+    pub data: Option<T>,
+}
 
 pub fn configure_admin_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(web::scope("/api/v1/admin").configure(admin_routes));
@@ -42,8 +51,8 @@ fn private_routes(cfg: &mut web::ServiceConfig) {
         .service(
             web::scope("/product")
                 .service(marketplace::product_handler::create_product)
-                .service(marketplace::product_handler::update_product)
                 .service(marketplace::product_handler::delete_product)
+                .service(marketplace::product_handler::create_product_variants)
                 .service(marketplace::product_handler::upload_product_images)
         );
 }
@@ -57,11 +66,23 @@ fn public_routes(cfg: &mut web::ServiceConfig) {
         )
         .service(
             web::scope("/product")
+                .service(marketplace::product_handler::get_product_by_id)
                 .service(marketplace::product_handler::get_products)
+                .service(marketplace::product_handler::get_product_variants)
                 .service(marketplace::product_handler::get_number_of_products),
         )
         .service(
             web::scope("/listing")
                 .service(marketplace::listing_handler::get_listing),
+        )
+        .service(
+            web::scope("/games")
+                .service(marketplace::game_handler::get_games)
+                .service(marketplace::game_handler::get_sets_by_game),
+        )
+        .service(
+            web::scope("/search")
+                .service(integrations::meilisearch_handler::search_listings)
+                .service(integrations::meilisearch_handler::search_products),
         );
 }

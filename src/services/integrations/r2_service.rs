@@ -115,7 +115,7 @@ impl R2Service {
         Ok(())
     }
 
-    async fn process_and_upload_listing_image(
+    async fn upload_listing_image(
         &self,
         image_data: &[u8],
         listing_id: &str,
@@ -223,12 +223,12 @@ impl R2Service {
 
     pub async fn upload_product_variant_images(
         &self,
-        product_id: Uuid,
+        product_id: &Uuid,
+        user_id: &Uuid,
         game: &str,
-        variant_id: &str,
+        variant_name: &str,
         front_image: Option<&[u8]>,
         back_image: Option<&[u8]>,
-        user_id: &str,
     ) -> Result<VariantImageUrls, anyhow::Error> {
         let timestamp = Utc::now();
         let sanitized_game = sanitize_for_path(game);
@@ -236,7 +236,7 @@ impl R2Service {
         let mut metadata = std::collections::HashMap::new();
         metadata.insert("type".to_string(), "product_variant".to_string());
         metadata.insert("product_id".to_string(), product_id.to_string());
-        metadata.insert("variant_id".to_string(), variant_id.to_string());
+        metadata.insert("variant_id".to_string(), variant_name.to_string());
         metadata.insert("game".to_string(), game.to_string());
         metadata.insert("uploaded_by".to_string(), user_id.to_string());
         metadata.insert("uploaded_at".to_string(), timestamp.to_rfc3339());
@@ -247,13 +247,12 @@ impl R2Service {
             back: None,
         };
 
-        // Upload front image if provided
         if let Some(front_data) = front_image {
             let front_urls = self.process_and_upload_variant_image(
                 front_data,
                 &sanitized_game,
                 &product_id.to_string(),
-                variant_id,
+                variant_name,
                 "front",
                 bucket_name,
                 metadata.clone(),
@@ -261,13 +260,12 @@ impl R2Service {
             result.front = Some(front_urls);
         }
 
-        // Upload back image if provided
         if let Some(back_data) = back_image {
             let back_urls = self.process_and_upload_variant_image(
                 back_data,
                 &sanitized_game,
                 &product_id.to_string(),
-                variant_id,
+                variant_name,
                 "back",
                 bucket_name,
                 metadata.clone(),
@@ -283,8 +281,8 @@ impl R2Service {
         image_data: &[u8],
         game: &str,
         product_id: &str,
-        variant_id: &str,
-        face: &str, // "front" or "back"
+        variant_name: &str,
+        face: &str,
         bucket_name: &str,
         metadata: std::collections::HashMap<String, String>,
     ) -> Result<ImageSizeUrls, anyhow::Error> {
@@ -298,7 +296,7 @@ impl R2Service {
         let thumbnail_bytes = image_to_jpeg_bytes(&thumbnail, 80)?;
 
         // Key format: products/{game}/{product_id}/{variant_id}/{face}/{size}.jpg
-        let base_path = format!("products/{}/{}/{}/{}", game, product_id, variant_id, face);
+        let base_path = format!("products/{}/{}/{}/{}", game, product_id, variant_name, face);
         let original_key = format!("{}/original.jpg", base_path);
         let medium_key = format!("{}/medium.jpg", base_path);
         let thumbnail_key = format!("{}/thumbnail.jpg", base_path);

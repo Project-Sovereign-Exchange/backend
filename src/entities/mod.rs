@@ -8,8 +8,10 @@ pub mod token_blacklist;
 pub mod products;
 pub mod listings;
 pub mod user_roles;
-mod games;
-mod sets;
+pub mod games;
+pub mod sets;
+pub(crate) mod product_variants;
+mod variant_images;
 
 pub use users::Entity as Users;
 pub use mfa_backup_codes::Entity as MfaBackupCodes;

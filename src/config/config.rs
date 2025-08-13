@@ -11,6 +11,8 @@ pub struct Config {
     pub host: String,
     pub port: u16,
     pub stripe_key: String,
+    pub meilisearch_url: String,
+    pub meilisearch_key: String,
     pub r2_account_id: String,
     pub r2_access_key_id: String,
     pub r2_secret_access_key: String,
@@ -55,6 +57,16 @@ impl Config {
             stripe_key: env::var("STRIPE_KEY")
                 .map_err(|e| {
                     MessageUtil::error(&format!("STRIPE_KEY must be set: {}", e));
+                    ()
+                })?,
+            meilisearch_url: env::var("MEILISEARCH_URL")
+                .map_err(|e| {
+                    MessageUtil::error(&format!("MEILISEARCH_URL must be set: {}", e));
+                    ()
+                })?,
+            meilisearch_key: env::var("MEILISEARCH_KEY")
+                .map_err(|e| {
+                    MessageUtil::error(&format!("MEILISEARCH_KEY must be set: {}", e));
                     ()
                 })?,
             r2_account_id: env::var("R2_ACCOUNT_ID")

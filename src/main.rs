@@ -3,6 +3,7 @@ use actix_web::{web, App, HttpServer, Result};
 use actix_web::web::Data;
 use sea_orm::ColumnType::Uuid;
 use crate::app_state::AppState;
+use crate::services::integrations::meilisearch_service::MeilisearchService;
 use crate::utils::cli_util::CliUtil;
 use crate::utils::message_util::MessageUtil;
 
@@ -32,7 +33,16 @@ async fn main() -> Result<()> {
             std::process::exit(1);
         }
     };
-    
+
+    let meilisearch_service = MeilisearchService::new(app_state.clone());
+    match meilisearch_service.validate_indexes().await {
+        Ok(_) => MessageUtil::info("Meilisearch indexes validated successfully"),
+        Err(e) => {
+            MessageUtil::error(&format!("Failed to validate Meilisearch indexes: {}", e));
+            std::process::exit(1);
+        }
+    }
+
     let server = HttpServer::new(move || {
         App::new()
             .app_data(Data::new(app_state.clone()))

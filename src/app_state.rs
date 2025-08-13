@@ -36,7 +36,7 @@ impl AppState {
         let stripe_client = Arc::new(StripeClient::new());
 
         let meilisearch_client = Arc::new(
-            meilisearch_sdk::client::Client::new("http://localhost:7700", Some("your-master-key"))
+            meilisearch_sdk::client::Client::new(&config.meilisearch_url, Some(&config.meilisearch_key))
                 .unwrap_or_else(|e| panic!("Failed to initialize client: {}", e))
         );
 

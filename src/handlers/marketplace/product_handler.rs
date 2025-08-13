@@ -2,49 +2,84 @@ use std::collections::HashMap;
 use actix_multipart::Multipart;
 use serde::{Deserialize, Serialize};
 use actix_web::{delete, get, post, web, HttpResponse, Responder, Result};
+use chrono::{DateTime, Utc};
 use futures_util::TryStreamExt;
 use uuid::Uuid;
+use validator::Validate;
 use crate::app_state::AppState;
-use crate::entities::products;
+use crate::entities::{product_variants, products};
+use crate::handlers::ApiResponse;
 use crate::services::account::jwt_service::Claims;
 use crate::services::marketplace::product_service::ProductService;
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct CreateProductRequest {
+    #[validate(length(min = 1, max = 255, message = "Name must be between 1 and 255 characters"))]
     pub name: String,
-    pub image_url: Option<String>,
-    pub game: String,
-    pub expansion: Option<String>,
-    pub set_number: Option<String>,
+    #[validate(length(max = 2000, message = "Description cannot exceed 2000 characters"))]
+    pub description: Option<String>,
+    #[validate(length(min = 1, max = 100, message = "Category is required"))]
     pub category: String,
+    #[validate(length(max = 100, message = "Subcategory cannot exceed 100 characters"))]
     pub subcategory: Option<String>,
-    pub metadata: serde_json::Value,
+    #[validate(length(min = 1, max = 100, message = "Game is required"))]
+    pub game: String,
+    #[validate(length(max = 100))]
+    pub set: Option<String>,
+    #[validate(url(message = "Must be a valid URL"))]
+    pub base_image_url: Option<String>,
+    #[validate(length(min = 1, message = "At least one variant is required"))]
+    pub variants: Vec<CreateVariantRequest>,
+    pub metadata: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Deserialize, Serialize, Validate)]
+pub struct CreateVariantRequest {
+    #[validate(length(min = 1, max = 100, message = "Variant name is required"))]
+    pub name: String,
+
+    #[validate(length(max = 50))]
+    pub set_number: Option<String>,
+
+    pub is_primary: bool,
+
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ProductImageUploadRequest {
+    pub uploads: Vec<ImageUploadRequest>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ImageUploadRequest {
-    pub variant_id: String,
+    pub variant_id: i32,
     pub variant_name: String,
     pub front_image: Option<ImageData>,
     pub back_image: Option<ImageData>,
     pub is_primary: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageData {
     pub file_data: Option<Vec<u8>>,
 }
 
-#[derive(Debug, Clone)]
-pub struct ProductImageUploadRequest {
-    pub uploads: Vec<ImageUploadRequest>,
+#[derive(Debug, Serialize)]
+pub struct ProductResponse {
+    pub product: products::Model,
+    pub variants: Vec<product_variants::Model>,
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct ProductResponse {
-    success: bool,
-    message: String,
-    product: products::Model,
+#[derive(Debug, Serialize)]
+pub struct VariantResponse {
+    pub id: i32,
+    pub variant_name: String,
+    pub set_number: Option<String>,
+    pub is_primary: bool,
+    pub has_back_image: bool,
+    pub metadata: Option<serde_json::Value>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[post("")]
@@ -54,17 +89,62 @@ pub async fn create_product(
 ) -> Result<impl Responder> {
     let request = request.into_inner();
     let product_service = ProductService::new(state.as_ref().clone());
-    
-   match product_service.create_product(request).await {
-       Ok(product) => Ok(HttpResponse::Ok().json(
-           ProductResponse {
-               success: true,
-               message: "Product created successfully".to_string(),
-               product,
-           }
-       )),
-       Err(e) => Err(actix_web::error::ErrorInternalServerError(e)),
-   }
+
+    match product_service.create_product(request).await {
+        Ok(product) => Ok(HttpResponse::Ok().json(
+            serde_json::json!({
+                "success": true,
+                "message": "Product created successfully",
+                "data": product,
+            })
+        )),
+        Err(e) => Err(actix_web::error::ErrorInternalServerError(e)),
+    }
+}
+
+#[post("/{product_id}/variants")]
+pub async fn create_product_variants(
+    state: web::Data<AppState>,
+    path: web::Path<(Uuid)>,
+    request: web::Json<Vec<CreateVariantRequest>>,
+) -> Result<impl Responder> {
+    let product_id = path.into_inner();
+    let request = request.into_inner();
+
+    let product_service = ProductService::new(state.as_ref().clone());
+
+    match product_service.create_product_variants(product_id, request).await {
+        Ok(variants) => Ok(HttpResponse::Ok().json(
+            serde_json::json!({
+                "success": true,
+                "message": "Variants created successfully",
+                "variants": variants,
+            })
+        )),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
+    }
+}
+
+#[get("/{product_id}/variants")]
+pub async fn get_product_variants(
+    state: web::Data<AppState>,
+    product_id: web::Path<uuid::Uuid>,
+) -> Result<impl Responder> {
+    let product_id = product_id.into_inner();
+    let product_service = ProductService::new(state.as_ref().clone());
+
+    match product_service.get_product_variants(&product_id).await {
+        Ok(variants) => {
+            Ok(HttpResponse::Ok().json(ApiResponse {
+                success: true,
+                message: "Product variants retrieved successfully".to_string(),
+                data: Some(variants),
+            }))
+        },
+        Err(e) => {
+            Err(actix_web::error::ErrorInternalServerError("Failed to get product variants"))
+        }
+    }
 }
 
 #[post("/{product_id}/images")]
@@ -76,48 +156,31 @@ pub async fn upload_product_images(
 ) -> Result<impl Responder> {
     let product_id = path.into_inner();
 
-    match parse_image_upload_form(payload).await {
-        Ok(upload_request) => {
-            let product_service = ProductService::new(state.as_ref().clone());
+    let upload_request = match parse_image_upload_form(payload).await {
+        Ok(request) => request,
+        Err(e) => return Ok(HttpResponse::BadRequest().json(
+            serde_json::json!({
+                "success": false,
+                "message": format!("Failed to parse upload form: {}", e),
+            })
+        )),
+    };
 
-            match product_service.upload_product_images(claims.sub, product_id, upload_request).await {
-                Ok(updated_product) => Ok(HttpResponse::Ok().json(
-                    ProductResponse {
-                        success: true,
-                        message: "Images uploaded successfully".to_string(),
-                        product: updated_product,
-                    }
-                )),
-                Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Error: {}", e))),
-            }
-        }
-        Err(e) => Ok(HttpResponse::BadRequest().json(format!("Invalid form data: {}", e))),
-    }
-}
-
-#[derive(Deserialize)]
-pub struct UpdateProductRequest {
-    pub id: uuid::Uuid,
-    pub name: Option<String>,
-    pub image_url: Option<String>,
-    pub game: Option<String>,
-    pub expansion: Option<String>,
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[post("/update")]
-pub async fn update_product(
-    state: web::Data<AppState>,
-    request: web::Json<UpdateProductRequest>,
-) -> Result<impl Responder> {
-    let request = request.into_inner();
     let product_service = ProductService::new(state.as_ref().clone());
 
-    match product_service.update_product(request).await {
-        Ok(product) => Ok(HttpResponse::Ok().json(product)),
-        Err(e) => {
-            Err(actix_web::error::ErrorInternalServerError("Product failed to update"))
-        },
+    match product_service.upload_product_images(&claims.sub, &product_id, upload_request).await {
+        Ok(_) => Ok(HttpResponse::Ok().json(
+            serde_json::json!({
+                "success": true,
+                "message": "Images uploaded successfully",
+            })
+        )),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(
+            serde_json::json!({
+                "success": false,
+                "message": format!("Upload failed: {}", e),
+            })
+        )),
     }
 }
 
@@ -134,22 +197,6 @@ pub async fn delete_product(
         Ok(false) => Err(actix_web::error::ErrorNotFound("Product not found")),
         Err(e) => {
             Err(actix_web::error::ErrorInternalServerError("Product failed to delete"))
-        }
-    }
-}
-
-#[get("/{id}")]
-pub async fn get_product(
-    state: web::Data<AppState>,
-    id: web::Path<uuid::Uuid>,
-) -> Result<impl Responder> {
-    let id = id.into_inner();
-    let product_service = ProductService::new(state.as_ref().clone());
-    
-    match product_service.get_product_by_id(&id).await {
-        Ok(product) => Ok(actix_web::HttpResponse::Ok().json(product)),
-        Err(e) => {
-            Err(actix_web::error::ErrorInternalServerError("Product failed to query"))
         }
     }
 }
@@ -171,7 +218,10 @@ pub async fn get_products(
 
     let total_number = product_service.get_number_of_products()
         .await
-        .map_err(|_| actix_web::error::ErrorInternalServerError("Failed to get total number of products"))?;
+        .map_err(|e| {
+            println!("Failed to get total number of products: {}", e);
+            actix_web::error::ErrorInternalServerError("Failed to get total number of products")
+        })?;
 
     if limit == 0 {
         return Err(actix_web::error::ErrorBadRequest("Limit must be greater than 0"));
@@ -195,6 +245,32 @@ pub async fn get_products(
         Err(e) => {
             println!("Failed to get products: {}", e);
             Err(actix_web::error::ErrorInternalServerError("Products failed to query"))
+        }
+    }
+}
+
+#[get("/{id}")]
+pub async fn get_product_by_id(
+    state: web::Data<AppState>,
+    path: web::Path<Uuid>,
+) -> Result<impl Responder> {
+    let product_id = path.into_inner();
+    let product_service = ProductService::new(state.as_ref().clone());
+
+    match product_service.get_product_by_id(&product_id).await {
+        Ok(Some(product)) => {
+            Ok(HttpResponse::Ok().json(ApiResponse {
+                success: true,
+                message: "Product retrieved successfully".to_string(),
+                data: Some(product),
+            }))
+        },
+        Ok(None) => {
+            Err(actix_web::error::ErrorNotFound("Product not found"))
+        },
+        Err(e) => {
+            println!("Failed to get product by ID: {}", e);
+            Err(actix_web::error::ErrorInternalServerError("Failed to get product"))
         }
     }
 }
@@ -225,11 +301,12 @@ async fn parse_image_upload_form(mut payload: Multipart) -> Result<ProductImageU
                 continue;
             }
 
-            let variant_id = parts[1].to_string();
+            let variant_id: i32 = parts[1].parse()
+                .map_err(|_| format!("Invalid variant_id: {}", parts[1]))?;
             let field_type = parts[2];
 
-            let upload = uploads.entry(variant_id.clone()).or_insert(ImageUploadRequest {
-                variant_id: variant_id.clone(),
+            let upload = uploads.entry(variant_id.to_string()).or_insert(ImageUploadRequest {
+                variant_id,
                 variant_name: format!("Variant {}", variant_id),
                 front_image: None,
                 back_image: None,
@@ -263,18 +340,6 @@ async fn parse_image_upload_form(mut payload: Multipart) -> Result<ProductImageU
                         });
                     }
                 }
-                "front_url" => {
-                    let mut field_data = Vec::new();
-                    while let Some(chunk) = field.try_next().await.map_err(|e| e.to_string())? {
-                        field_data.extend_from_slice(&chunk);
-                    }
-                    let url = String::from_utf8(field_data).map_err(|e| e.to_string())?;
-                    if !url.is_empty() {
-                        upload.front_image = Some(ImageData {
-                            file_data: None,
-                        });
-                    }
-                }
                 "back" => {
                     if field.content_type().is_some() {
                         let mut file_data = Vec::new();
@@ -283,18 +348,6 @@ async fn parse_image_upload_form(mut payload: Multipart) -> Result<ProductImageU
                         }
                         upload.back_image = Some(ImageData {
                             file_data: Some(file_data),
-                        });
-                    }
-                }
-                "back_url" => {
-                    let mut field_data = Vec::new();
-                    while let Some(chunk) = field.try_next().await.map_err(|e| e.to_string())? {
-                        field_data.extend_from_slice(&chunk);
-                    }
-                    let url = String::from_utf8(field_data).map_err(|e| e.to_string())?;
-                    if !url.is_empty() {
-                        upload.back_image = Some(ImageData {
-                            file_data: None,
                         });
                     }
                 }
