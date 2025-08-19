@@ -5,6 +5,7 @@ use actix_web::{Responder, Result, web, post, get, delete};
 use futures_util::TryStreamExt;
 use uuid::Uuid;
 use crate::app_state::AppState;
+use crate::handlers::ApiResponse;
 use crate::services::account::jwt_service::Claims;
 use crate::services::marketplace::listing_service::ListingService;
 use crate::services::marketplace::product_service::ProductService;
@@ -29,7 +30,7 @@ pub struct UpdateListingRequest {
     pub description: Option<String>,
 }
 
-#[post("/create")]
+#[post("")]
 pub async fn create_listing(
     state: web::Data<AppState>,
     claims: Claims,
@@ -39,7 +40,11 @@ pub async fn create_listing(
     let listing_service = ListingService::new(state.as_ref().clone());
 
     match listing_service.create_listing(claims.sub, request).await {
-        Ok(listing) => Ok(actix_web::HttpResponse::Ok().json(listing)),
+        Ok(listing) => Ok(actix_web::HttpResponse::Ok().json(ApiResponse {
+            success: true,
+            message: "Listing created successfully".to_string(),
+            data: Some(listing),
+        })),
         Err(e) => Err(actix_web::error::ErrorInternalServerError(e)),
 
     }
@@ -63,7 +68,7 @@ pub async fn update_listing(
 #[get("/{id}")]
 pub async fn get_listing(
     state: web::Data<AppState>,
-    id: web::Path<uuid::Uuid>,
+    id: web::Path<Uuid>,
 ) -> Result<impl Responder> {
     let id = id.into_inner();
     let listing_service = ListingService::new(state.as_ref().clone());
@@ -78,7 +83,7 @@ pub async fn get_listing(
 pub async fn delete_listing(
     state: web::Data<AppState>,
     claims: Claims,
-    id: web::Path<uuid::Uuid>,
+    id: web::Path<Uuid>,
 ) -> Result<impl Responder> {
     let id = id.into_inner();
     let listing_service = ListingService::new(state.as_ref().clone());

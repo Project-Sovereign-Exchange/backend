@@ -1,4 +1,4 @@
-use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, EntityTrait, Set, QueryFilter, ColumnTrait};
 use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::entities::listings;
@@ -22,6 +22,10 @@ impl ListingService {
         user_id: Uuid,
         request: CreateListingRequest,
     ) -> Result<listings::Model, String> {
+        let condition = string_to_condition(
+            &request.condition
+        ).ok_or_else(|| "condition not defined".to_string())?;
+
         let user_service = UserService::new(self.state.clone());
 
         user_service.get_user_by_id(&user_id)
@@ -42,10 +46,6 @@ impl ListingService {
             request.price
         ).await
         .map_err(|e| format!("Failed to create Stripe product: {}", e))?;
-        
-        let condition = string_to_condition(
-            &request.condition
-        ).ok_or_else(|| "condition not defined".to_string())?;
         
         let listing = listings::Model {
             id: Uuid::new_v4(),
@@ -71,7 +71,7 @@ impl ListingService {
             .insert(db)
             .await
             .map_err(|e| format!("Failed to create listing: {}", e))?;
-        
+
         Ok(listing)
     }
 
@@ -173,5 +173,18 @@ impl ListingService {
             .map_err(|e| format!("Failed to delete listing: {}", e))?;
 
         Ok(deleted.deleted_at.is_some())
+    }
+
+    pub async fn get_listings_by_product_id(
+        &self,
+        product_id: Uuid
+    ) -> Result<Vec<listings::Model>, String> {
+        let db = &self.state.db;
+
+        listings::Entity::find()
+            .filter(listings::Column::ProductId.eq(product_id))
+            .all(db)
+            .await
+            .map_err(|e| format!("Failed to fetch listings: {}", e))
     }
 }

@@ -17,16 +17,21 @@ pub enum ListingStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "card_condition")]
+#[serde(rename_all = "snake_case")]
 pub enum Condition {
     #[sea_orm(string_value = "mint")]
     Mint,
     #[sea_orm(string_value = "near_mint")]
+    #[serde(rename = "near_mint")]
     NearMint,
     #[sea_orm(string_value = "lightly_played")]
+    #[serde(rename = "lightly_played")]
     LightlyPlayed,
     #[sea_orm(string_value = "moderately_played")]
+    #[serde(rename = "moderately_played")]
     ModeratelyPlayed,
     #[sea_orm(string_value = "heavily_played")]
+    #[serde(rename = "heavily_played")]
     HeavilyPlayed,
     #[sea_orm(string_value = "damaged")]
     Damaged,

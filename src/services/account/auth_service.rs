@@ -104,11 +104,11 @@ impl AuthService {
     }
 
     pub fn logout(&self, token: &str) -> Result<String, String> {
-        // Implement logout logic here
+        //blacklist the token or perform any necessary cleanup
         if token.is_empty() {
             return Err("Token cannot be empty".to_string());
         }
-        // Simulate successful logout
+
         Ok("Logout successful".to_string())
     }
 }

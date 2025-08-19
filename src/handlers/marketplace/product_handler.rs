@@ -10,6 +10,7 @@ use crate::app_state::AppState;
 use crate::entities::{product_variants, products};
 use crate::handlers::ApiResponse;
 use crate::services::account::jwt_service::Claims;
+use crate::services::marketplace::listing_service::ListingService;
 use crate::services::marketplace::product_service::ProductService;
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
@@ -181,6 +182,28 @@ pub async fn upload_product_images(
                 "message": format!("Upload failed: {}", e),
             })
         )),
+    }
+}
+
+#[get("/{id}/listings")]
+pub async fn get_product_listings(
+    state: web::Data<AppState>,
+    id: web::Path<Uuid>,
+) -> Result<impl Responder> {
+    let product_id = id.into_inner();
+    let listing_service = ListingService::new(state.as_ref().clone());
+
+    match listing_service.get_listings_by_product_id(product_id).await {
+        Ok(listings) => {
+            Ok(HttpResponse::Ok().json(ApiResponse {
+                success: true,
+                message: "Product listings retrieved successfully".to_string(),
+                data: Some(listings),
+            }))
+        },
+        Err(e) => {
+            Err(actix_web::error::ErrorInternalServerError("Failed to get product listings"))
+        }
     }
 }
 

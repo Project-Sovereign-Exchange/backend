@@ -43,7 +43,7 @@ fn private_routes(cfg: &mut web::ServiceConfig) {
                 .service(account::mfa_handler::verify_mfa),
         )
         .service(
-            web::scope("/listing")
+            web::scope("/listings")
                 .service(marketplace::listing_handler::create_listing)
                 .service(marketplace::listing_handler::update_listing)
                 .service(marketplace::listing_handler::delete_listing)
@@ -65,11 +65,12 @@ fn public_routes(cfg: &mut web::ServiceConfig) {
                 .service(account::auth_handler::register),
         )
         .service(
-            web::scope("/product")
+            web::scope("/products")
                 .service(marketplace::product_handler::get_product_by_id)
                 .service(marketplace::product_handler::get_products)
                 .service(marketplace::product_handler::get_product_variants)
-                .service(marketplace::product_handler::get_number_of_products),
+                .service(marketplace::product_handler::get_number_of_products)
+                .service(marketplace::product_handler::get_product_listings),
         )
         .service(
             web::scope("/listing")
@@ -82,7 +83,7 @@ fn public_routes(cfg: &mut web::ServiceConfig) {
         )
         .service(
             web::scope("/search")
-                .service(integrations::meilisearch_handler::search_listings)
-                .service(integrations::meilisearch_handler::search_products),
+                .service(integrations::meilisearch_handler::search_products)
+                .service(integrations::meilisearch_handler::get_trending_products),
         );
 }

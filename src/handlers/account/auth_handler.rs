@@ -100,7 +100,12 @@ pub async fn register(
     let auth_service = AuthService::new(state.as_ref().clone());
     
     match auth_service.register_user(request).await {
-        Ok(_) => Ok(HttpResponse::Ok()),
+        Ok(_) => Ok(HttpResponse::Ok().json(
+            serde_json::json!({
+                "message": "User registered successfully",
+                "success": true
+            }
+        ))),
         Err(e) => Err(actix_web::error::ErrorBadRequest(e)),
     }
 }

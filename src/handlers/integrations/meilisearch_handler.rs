@@ -119,6 +119,7 @@ pub async fn search_products(
     let search_service = MeilisearchService::new(state.as_ref().clone());
     let query_params = query.into_inner();
 
+    /*
     if query_params.q.trim().is_empty() {
         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()> {
             success: false,
@@ -135,6 +136,7 @@ pub async fn search_products(
             processing_time_ms: 0,
         }));
     }
+     */
 
     let limit = query_params.limit.unwrap_or(20).min(100);
     let offset = query_params.offset.unwrap_or(0);
@@ -181,67 +183,39 @@ pub async fn search_products(
     }
 }
 
-#[get("/listings")]
-pub async fn search_listings(
+#[get("/products/trending")]
+pub async fn get_trending_products(
     state: web::Data<AppState>,
-    query: web::Query<SearchQuery>,
 ) -> Result<impl Responder> {
     let search_service = MeilisearchService::new(state.as_ref().clone());
-    let query_params = query.into_inner();
 
-    if query_params.q.trim().is_empty() {
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()> {
-            success: false,
-            message: "Search query cannot be empty".to_string(),
-            data: None,
-        }));
-    }
-
-    if query_params.q.len() < 2 {
-        return Ok(HttpResponse::Ok().json(QuickSearchResponse {
-            products: vec![],
-            listings: vec![],
-            total_hits: 0,
-            processing_time_ms: 0,
-        }));
-    }
-
-    let limit = query_params.limit.unwrap_or(20).min(100);
-    let offset = query_params.offset.unwrap_or(0);
-    let filters = build_listing_filters(&query_params);
-    let sort = parse_sort_param(&query_params.sort);
-
-    let start_time = std::time::Instant::now();
-
-    match search_service.search_listings_paginated(
-        &query_params.q,
-        filters.as_deref(),
-        offset,
-        limit,
-        sort.as_deref()
+    match search_service.search_products_trending(
+        0,
+        10
     ).await {
-        Ok(results) => {
-            let processing_time = start_time.elapsed().as_millis() as u64;
+        Ok(products) => {
+            let hits: Vec<_> = products.hits.into_iter().map(|hit| hit.result).collect();
+            let hits_count = hits.len();
+            let estimated_total_hits = products.estimated_total_hits.unwrap_or(hits.len());
 
-            let hits_count = results.hits.len();
-            let estimated_total_hits = results.estimated_total_hits;
-
-            let hits: Vec<_> = results.hits.into_iter().map(|hit| hit.result).collect();
-
-            Ok(HttpResponse::Ok().json(SearchResponse {
-                hits,
-                query: query_params.q,
-                processing_time_ms: processing_time,
-                hits_count,
-                offset,
-                limit,
-                estimated_total_hits,
+            Ok(HttpResponse::Ok().json(ApiResponse {
+                success: true,
+                message: "Trending products retrieved successfully".to_string(),
+                data: Some(SearchResponse {
+                    hits,
+                    query: "trending".to_string(),
+                    processing_time_ms: 0,
+                    hits_count,
+                    offset: 0,
+                    limit: 10,
+                    estimated_total_hits: Some(estimated_total_hits),
+                }),
             }))
         }
         Err(e) => {
             Ok(HttpResponse::InternalServerError().json(ApiResponse::<()> {
                 success: false,
-                message: format!("Listing search failed: {}", e),
+                message: format!("Failed to retrieve trending products: {}", e),
                 data: None,
             }))
         }

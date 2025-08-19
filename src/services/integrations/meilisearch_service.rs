@@ -165,6 +165,23 @@ impl MeilisearchService {
         ).await
     }
 
+    pub async fn search_products_trending(
+        &self,
+        offset: usize,
+        limit: usize,
+    ) -> Result<SearchResults<SearchableProduct>, String> {
+        let products_index = self.state.meilisearch_client.index("products");
+        let mut search = products_index.search();
+
+        search
+            .with_offset(offset)
+            .with_limit(limit);
+
+        search.execute::<SearchableProduct>()
+            .await
+            .map_err(|e| format!("Search failed: {}", e))
+    }
+
     pub async fn search_listings(&self, query: &str, filters: Option<&str>) -> Result<SearchResults<SearchableListing>, String> {
         let listings_index = self.state.meilisearch_client.as_ref().clone().index("listings");
         let mut search = listings_index.search();
